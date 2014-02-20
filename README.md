@@ -23,6 +23,8 @@ The `nodes` data.frame has the following columns, at least:
 `id`
 `is_root`
 
+(note: "fake" nodes from NetworkPlanner are excluded).
+
 Functions
 ---
  * read_networkplan(metrics_local_csvfile, network_shapefile)
@@ -43,6 +45,16 @@ Functions
  * plot.NetworkPlan(np)
    * np: `NetworkPlan`
    * __output__: BOOM! a plot shows up.
+ * as.data.frame(np)
+   * __returns__: a data frame, where each settlement is represented as a node.
+ * as.SpatialLinesDataFrame(np)
+   * __returns__: A Spatial Lines Data Frame, where each line has the attributes that are present in the edge attributes of np@network, and all values are NA for lines in the pre-existing network
+ * calculateCapacity(np, ??, nearOrFar='near')
+   * ??: how do you take values from the node and assign to edges
+   * __returns__: A `NetworkPlan`, where np@network now has a `capacity` edge attribute per edge.
+?? branch identify
+?? grid-length
+?? units
 
 Usage Example
 ---
