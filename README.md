@@ -46,15 +46,10 @@ Functions
 
 Usage Example
 ---
+```
 # Download scenario (eg. 531) from networkplanner
 np <- read_networkplan('531/metrics-local.csv', '531/metrics.shp')
 np_sequenced <- sequence_ratio(np, numerator='annualSales', denominator='Investment', sight='near')
 # equivalent to:
 np_sequenced <- sequence(np, function(x) { x$annualSales / x$Investment }, sight='near')
-
-
-
-
-
-
-
+```
