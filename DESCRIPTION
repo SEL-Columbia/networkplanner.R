@@ -1,0 +1,20 @@
+Package: networkplanner
+Type: Package
+Title: Pre- and post-processes data from NetworkPlanner
+Version: 0.0.1
+Date: 2014-02-21
+Author: Jonathan Carbajal, Chris Natali, Prabhas Pokharel, Zaiming Yao
+Maintainer: SEL Devs <SEL-columbia-dev@googlegroups.com>
+Description: Pre- and post-processes data from NetworkPlanner
+    (http://networkplanner.modilabs.org)
+Depends:
+    R (>= 2.15.1),
+    RJSONIO (>= 0.96),
+    stringr,
+    plyr,
+    RCurl,
+    lubridate,
+    doBy,
+    sp
+License: TBD
+URL: http://www.SEL-Columbia.github.com/networkplanner.R
