@@ -9,12 +9,11 @@ Description: Pre- and post-processes data from NetworkPlanner
     (http://networkplanner.modilabs.org)
 Depends:
     R (>= 2.15.1),
-    RJSONIO (>= 0.96),
+    igraph,
     stringr,
     plyr,
     RCurl,
     lubridate,
-    doBy,
     sp
 License: TBD
 URL: http://www.SEL-Columbia.github.com/networkplanner.R
