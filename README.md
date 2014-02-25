@@ -15,21 +15,26 @@ instalL_github('networkplanner.R', 'SEL-Columbia')
 Data Structures
 ---
 A `NetworkPlan` object consists of the following:
-`nodes` (a SpatialPointsDataFrame)
-`network` (an igraph object)
-`pre-existing network` (a SpatialLinesDataFrame)
+ * `nodes` (a SpatialPointsDataFrame)
+ * `network` (an igraph object)
+ * `pre-existing network` (a SpatialLinesDataFrame)
 
 The `nodes` data.frame has the following columns, at least:
-`id`
-`is_root`
+ * `id`
+ * `is_root`
 
 (note: "fake" nodes from NetworkPlanner are excluded).
 
 Functions
 ---
- * read_networkplan(metrics_local_csvfile, network_shapefile)
-   * metrics_local_csvfile: is networkplanner's metrics-local.csv output for a given scenario
-   * network_shapefile: is networkplanner's network.shp output for that same scenario
+ * download_scenario(scenario_number, directory_to_download_into, userpwd=NULL, npURL='http://networkplanner.modilabs.org')
+   * scenario_number: scenario number in network planner 
+   * directory_to_download_into: a directory to unzip this data into.
+   * userpwd: USERNAME:PASSWORD (must be separated by colon). If NULL, scenario_number must be public.
+   * npURL: Network Planner URL.
+   * _returns_: a `NetworkPlan` object
+ * read_networkplan(dirname)
+   * dirname: is networkplanner's metrics-local.csv output for a given scenario
    * _returns_: a `NetworkPlan` object
  * sequence_ratio(np, numerator, denominator, nearOrFar='near')
    * np: `NetworkPlan`
