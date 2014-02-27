@@ -1,6 +1,8 @@
 require(sp)
 require(igraph)
 require(rgdal)
+require(stringr)
+require(plyr)
 
 # The NetworkPlan object
 setClass("NetworkPlan", representation(nodes="SpatialPointsDataFrame",
@@ -42,6 +44,15 @@ read_networkplan = function(directory_name, debug=F) {
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
     
     # find roots and separate existing vs. planned network
+    
+    
+    
+    p1 <- coord_matrix[1:115,1:2,1]
+    p2 <- coord_matrix[1:115,1:2,2]
+    t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
+    t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
+    match_result <- cbind(t1,t2)
+    
     # TODO: clean up
     coord_matrix <- get_coord_matrix(network_shp)
     p1 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,1])
