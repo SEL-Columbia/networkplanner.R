@@ -57,6 +57,10 @@ Functions
  * calculateCapacity(np, ??, nearOrFar='near')
    * ??: how do you take values from the node and assign to edges
    * __returns__: A `NetworkPlan`, where np@network now has a `capacity` edge attribute per edge.
+ * write.NetworkPlan(np, planDirectory, nodeFormat='csv', edgeFormat='shp')
+   * np: `NetworkPlan`
+   * planDirectory:  Directory to store nodes and edges within
+   
 ?? branch identify
 ?? grid-length
 ?? units
@@ -69,4 +73,6 @@ np <- read_networkplan('531/metrics-local.csv', '531/metrics.shp')
 np_sequenced <- sequence_ratio(np, numerator='annualSales', denominator='Investment', sight='near')
 # equivalent to:
 np_sequenced <- sequence(np, function(x) { x$annualSales / x$Investment }, sight='near')
+# write sequenced networkplan to a directory (creates a nodes.csv and edges.shp file in that dir)
+write.NetworkPlan(np_sequenced, 'plan_directory')
 ```
