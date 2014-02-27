@@ -17,7 +17,7 @@ Data Structures
 A `NetworkPlan` object consists of the following:
  * `nodes` (a SpatialPointsDataFrame)
  * `network` (an igraph object)
- * `pre-existing network` (a SpatialLinesDataFrame)
+ * `existing_network` (a SpatialLinesDataFrame)
 
 The `nodes` data.frame has the following columns, at least:
  * `id`
