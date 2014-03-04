@@ -45,7 +45,7 @@ construct_NetworkPlan <- function() {
     
     # create directed tree from mst_graph from an arbitrary root node
     undir_mst <- as.directed(mst_graph, mode="mutual")
-    dir_mst_dom <- dominator.tree(undir_mst, root=6, mode="in")
+    dir_mst_dom <- dominator.tree(undir_mst, root=6, mode="out")
     dir_mst <- dir_mst_dom$domtree
 
     # assign "sequence" attribute to node based on breadth-first traversal
