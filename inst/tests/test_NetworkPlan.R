@@ -40,6 +40,18 @@ construct_NetworkPlan <- function() {
     # todo:  construct full graph from distance pairs
     #        then the minimum spanning tree
     #        then add this to the NetworkPlan object
+    full_graph <- graph.adjacency(distance_pair_matrix, mode="undirected", weighted=TRUE)
+    mst_graph <- minimum.spanning.tree(full_graph)
+    
+    # create directed tree from mst_graph from an arbitrary root node
+    undir_mst <- as.directed(mst_graph, mode="mutual")
+    dir_mst_dom <- dominator.tree(undir_mst, root=6, mode="in")
+    dir_mst <- dir_mst_dom$domtree
+
+    # assign "sequence" attribute to node based on breadth-first traversal
+    
+     
+      
 }
 
      
@@ -54,5 +66,6 @@ test_that("reading network plan 174 creates a basically valid NetworkPlan", {
 test_that("sequence of nodes are consistent with graph topology", {
     # net_plan <- read_networkplan(test_scenario_dir)
     # construct NetworkPlan from scratch
+    
 })
     
