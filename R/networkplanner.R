@@ -4,6 +4,9 @@ require(rgdal)
 require(stringr)
 require(plyr)
 
+# Workaround for using igraph in an s4 object slot
+setOldClass("igraph")
+
 # The NetworkPlan object
 setClass("NetworkPlan", representation(nodes="SpatialPointsDataFrame",
                                        network="igraph", existing_network="SpatialLinesDataFrame"))
@@ -76,3 +79,24 @@ get_coord_matrix = function(sldf) {
     stopifnot(dim(line_coords)[2:3] == c(2,2))
     line_coords
 }
+
+np_bfs_sequencer <- function(g, roots) {
+    children <- roots
+    ordered_nodes <- min(children)
+    children <- append(children, neighbors(g, ordered_nodes))
+    while(length(children)) {
+        ordered_nodes <- append(ordered_nodes, min(children))
+        children <- append(children, neighbors(g, ordered_nodes))
+    }
+    ordered_nodes
+}
+
+setGeneric("sequence", function(np, roots) standardGeneric("sequence"))
+setMethod("sequence", signature(np="NetworkPlan", roots="numeric"), 
+    function(np, roots) {
+        np_bfs_sequencer(np@network, roots)
+    }
+)
+        
+        
+        

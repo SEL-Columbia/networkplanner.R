@@ -30,12 +30,14 @@ naive_hav_dist_pairs <- function(A, B) {
     result
 } 
 
-construct_NetworkPlan <- function() { 
+sample_NetworkPlan <- function() { 
     coords <- matrix(runif(20, min=-1.0, max=1.0), nrow=10, ncol=2)
     df <- data.frame(metric=runif(10, min=100000, max=1000000))
     proj4str <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
     sp_df <- SpatialPointsDataFrame(coords, df, proj4string=proj4str)
     
+    sl_df <- SpatialLinesDataFrame(proj4string=proj4str)
+
     distance_pair_matrix <- naive_hav_dist_pairs(sp_df, sp_df)
     # todo:  construct full graph from distance pairs
     #        then the minimum spanning tree
@@ -48,10 +50,7 @@ construct_NetworkPlan <- function() {
     dir_mst_dom <- dominator.tree(undir_mst, root=6, mode="out")
     dir_mst <- dir_mst_dom$domtree
 
-    # assign "sequence" attribute to node based on breadth-first traversal
-    
-     
-      
+    new("NetworkPlan", nodes=sp_df, network=dir_mst)
 }
 
      
@@ -66,6 +65,8 @@ test_that("reading network plan 174 creates a basically valid NetworkPlan", {
 test_that("sequence of nodes are consistent with graph topology", {
     # net_plan <- read_networkplan(test_scenario_dir)
     # construct NetworkPlan from scratch
+    np <- sample_NetworkPlan()
+    
     
 })
     
