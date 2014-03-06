@@ -1,6 +1,11 @@
 # History files
 .Rhistory
 
+# Rstudio project files
+.RData
+networkplanner.R.Rproj
+.Rbuildignore
+
 # Example code in package build process
 *-Ex.R
 .Rproj.user
