@@ -80,21 +80,55 @@ get_coord_matrix = function(sldf) {
     line_coords
 }
 
-np_bfs_sequencer <- function(g, roots) {
-    children <- roots
-    ordered_nodes <- min(children)
-    children <- append(children, neighbors(g, ordered_nodes))
-    while(length(children)) {
-        ordered_nodes <- append(ordered_nodes, min(children))
-        children <- append(children, neighbors(g, ordered_nodes))
-    }
-    ordered_nodes
+#' Helper function to do the heavy sequencing work
+np_bfs_sequencer <- function(np, roots) {
 }
 
-setGeneric("sequence", function(np, roots) standardGeneric("sequence"))
+#' Default selector
+#' Simply selects the 
+default_selector <- function(node_df) {
+    node_df[min(node_df$vid)==node_df$vid,]
+}
+    
+
+#' Sequence a NetworkPlan via breadth-first search from roots
+#' and a selector function (to select from the "frontier" 
+#' of SpatialPoints)
+#'
+#' @param np a NetworkPlan
+#' @param roots the indices of root vertices to sequence from
+#' @param selector function that returns which vertex (by id) in the
+#'        "frontier" of the search gets selected next based on 
+#'        SpatialPointsDataFrame
+#' @return A SpatialPointsDataFrame with a sequence column
+#' @export
+setGeneric("sequence", function(np, roots, selector=default_selector) standardGeneric("sequence"))
 setMethod("sequence", signature(np="NetworkPlan", roots="numeric"), 
-    function(np, roots) {
-        np_bfs_sequencer(np@network, roots)
+    function(np, roots, selector=default_selector) {
+        frontier <- roots
+        nodes <- np@nodes
+        # setup node dataframe with vid (vertex id) field
+        # for backrefs
+        nodes$vid <- as.numeric(row.names(nodes))
+        frontier_df <- nodes[frontier,]
+        # keep track of the sequence of the nodes
+        selected <- selector(frontier_df)$vid
+        # node_sequence a vector whose position represents the sequence index
+        # of the node and the value in the position is the node/vertex id
+        node_sequence <- selected
+        # frontier <- (frontier - selected) + new_neighbors
+        frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
+        while(length(frontier)) {
+            frontier_df <- nodes[frontier,]
+            # keep track of the sequence of the nodes
+            selected <- selector(frontier_df)$vid
+            node_sequence <- append(node_sequence, selected)
+            # frontier <- (frontier - selected) + new_neighbors
+            frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
+        }
+        # now apply the sequence back
+        np@nodes[node_sequence, "sequence"] <- 1:length(np@nodes)
+        np@nodes
     }
 )
         
