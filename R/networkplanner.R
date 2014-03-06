@@ -86,8 +86,11 @@ get_coord_matrix = function(sldf) {
     line_coords
 }
 
-#' Default selector
-#' Simply selects the node with the smallest vertex id
+#' Default selector for sequence method
+#' This simply selects the node with the smallest vertex id
+#' 
+#' @param node_df SpatialPointsDataFrame to apply selection to
+#' @return subset of the node_df
 default_selector <- function(node_df) {
     node_df[min(node_df$vid)==node_df$vid,]
 }
