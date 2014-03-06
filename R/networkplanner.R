@@ -8,8 +8,14 @@ require(plyr)
 setOldClass("igraph")
 
 # The NetworkPlan object
-setClass("NetworkPlan", representation(nodes="SpatialPointsDataFrame",
-                                       network="igraph", existing_network="SpatialLinesDataFrame"))
+setClass("NetworkPlan", representation(nodes="SpatialPointsDataFrame", 
+                                       network="igraph"))
+# Handle case with an existing_network as a subclass for now 
+# There's probably a better way to handle it, but without this R complains
+# about the existing_network slot being empty if there's nothing there
+setClass("NetworkPlanEx", representation(existing_network="SpatialLinesDataFrame"),
+                                        contains="NetworkPlan")
+
 
 #' Download scenario from networkplanner into the given directory
 #'
@@ -80,16 +86,11 @@ get_coord_matrix = function(sldf) {
     line_coords
 }
 
-#' Helper function to do the heavy sequencing work
-np_bfs_sequencer <- function(np, roots) {
-}
-
 #' Default selector
-#' Simply selects the 
+#' Simply selects the node with the smallest vertex id
 default_selector <- function(node_df) {
     node_df[min(node_df$vid)==node_df$vid,]
 }
-    
 
 #' Sequence a NetworkPlan via breadth-first search from roots
 #' and a selector function (to select from the "frontier" 
@@ -100,7 +101,8 @@ default_selector <- function(node_df) {
 #' @param selector function that returns which vertex (by id) in the
 #'        "frontier" of the search gets selected next based on 
 #'        SpatialPointsDataFrame
-#' @return A SpatialPointsDataFrame with a sequence column
+#' @return A NetworkPlan whose nodes SpatialPointsDataFrame has a sequence 
+#'         column and values
 #' @export
 setGeneric("sequence", function(np, roots, selector=default_selector) standardGeneric("sequence"))
 setMethod("sequence", signature(np="NetworkPlan", roots="numeric"), 
@@ -128,7 +130,7 @@ setMethod("sequence", signature(np="NetworkPlan", roots="numeric"),
         }
         # now apply the sequence back
         np@nodes[node_sequence, "sequence"] <- 1:length(np@nodes)
-        np@nodes
+        np
     }
 )
         
