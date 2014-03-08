@@ -3,6 +3,7 @@ require(igraph)
 require(rgdal)
 require(stringr)
 require(plyr)
+#' @include np-utils.R
 
 # Workaround for using igraph in an s4 object slot
 setOldClass("igraph")
@@ -63,7 +64,13 @@ read_networkplan = function(directory_name, debug=F) {
     match_result <- cbind(t1,t2)
     
     # TODO: clean up
-    coord_matrix <- get_coord_matrix(network_shp)
+    line_matrix <- get_coord_matrix(network_shp)
+    coord_df <- get_coord_dataframe(network_shp)
+    network_adj_matrix <- get_adjacency_matrix(line_matrix, coord_df)
+    network_graph <- graph.adjacency(network_adj_matrix, mode="undirected")
+
+    #TODO:  find "roots" and create "dominator trees" from them
+
     p1 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,1])
     p1$FID <- row.names(p1)
     p2 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,2])
