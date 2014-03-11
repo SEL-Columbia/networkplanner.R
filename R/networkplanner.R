@@ -65,11 +65,12 @@ read_networkplan = function(directory_name, debug=F) {
     # TODO: clean up
     line_matrix <- get_coord_matrix(network_shp)
     coord_df <- get_coord_dataframe(network_shp)
+    coord_df$id <- as.numeric(row.names(coord_df))
     network_adj_matrix <- get_adjacency_matrix(line_matrix, coord_df)
     network_graph <- graph.adjacency(network_adj_matrix, mode="undirected")
 
     #TODO:  find "roots" and create "dominator trees" from them
-
+    if(FALSE) {
     p1 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,1])
     p1$FID <- row.names(p1)
     p2 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,2])
@@ -78,16 +79,17 @@ read_networkplan = function(directory_name, debug=F) {
             by.x=c(1,2), by.y=c("X","Y"), all.x=TRUE)
     p2 <- merge(p2, as.data.frame(cbind(nodes@coords, id=nodes$id)), 
                 by.x=c(1,2), by.y=c("X","Y"), all.x=TRUE)
-    
+    } 
     ## TODO: figure out intersection points, with the following objectives:
     ## determine is_root for each node
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
+    network_graph
 }
 
 # Get the co-ordinate matrix out of a SpatialLinesDataFrame (as a three dimensional array)
 # Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
 get_coord_matrix = function(sldf) {
-    line_coords <- laply(sldf@lines, function(l) { t(l@Lines[[1]]@coords) })
+    line_coords <- laply(sldf@lines, function(l) { l@Lines[[1]]@coords })
     stopifnot(dim(line_coords)[2:3] == c(2,2))
     line_coords
 }
