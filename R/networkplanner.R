@@ -3,6 +3,7 @@ require(igraph)
 require(rgdal)
 require(stringr)
 require(plyr)
+#' @include np-utils.R
 
 # Workaround for using igraph in an s4 object slot
 setOldClass("igraph")
@@ -53,17 +54,22 @@ read_networkplan = function(directory_name, debug=F) {
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
     
     # find roots and separate existing vs. planned network
+    # test code
+    # p1 <- coord_matrix[1:115,1:2,1]
+    # p2 <- coord_matrix[1:115,1:2,2]
+    # t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
+    # t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
+    # match_result <- cbind(t1,t2)
     
-    
-    
-    p1 <- coord_matrix[1:115,1:2,1]
-    p2 <- coord_matrix[1:115,1:2,2]
-    t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
-    t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
-    match_result <- cbind(t1,t2)
-    
+    # Code to create graph from network_shp
     # TODO: clean up
-    coord_matrix <- get_coord_matrix(network_shp)
+    line_matrix <- get_coord_matrix(network_shp)
+    coord_df <- get_coord_dataframe(network_shp)
+    network_adj_matrix <- get_adjacency_matrix(line_matrix, coord_df)
+    network_graph <- graph.adjacency(network_adj_matrix, mode="undirected")
+
+    #TODO:  find "roots" and create "dominator trees" from them
+
     p1 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,1])
     p1$FID <- row.names(p1)
     p2 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,2])
