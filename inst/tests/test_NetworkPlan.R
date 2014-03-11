@@ -3,6 +3,8 @@ require(networkplanner)
 require(sp)
 require(spdep)
 require(igraph)
+require(geosphere)
+#' @include np-utils.R
 
 # TO RUN THESE TESTS: setwd(???/networkplanner.R); require(testthat); test_dir('inst/tests')
 # TODO: is there a better system?
@@ -51,7 +53,6 @@ sample_NetworkPlan <- function() {
     # There's no existing_network in this plan
     new("NetworkPlan", nodes=sp_df, network=dir_mst)
 }
-
      
     
 test_that("reading network plan 174 creates a basically valid NetworkPlan", {
@@ -66,7 +67,7 @@ test_that("sequence of nodes are consistent with graph topology", {
     # construct NetworkPlan from scratch
     np <- sample_NetworkPlan()
     # strange that a Vertex sequence cannot auto-cast itself to a numeric
-    roots <- as.numeric(V(np_s@network)[degree(np_s@network, mode="in")==0])
+    roots <- as.numeric(V(np@network)[degree(np@network, mode="in")==0])
     np <- sequence(np, roots)
     e_list <- get.edgelist(np@network)
     from_seq <- np@nodes$sequence[e_list[,1]]
@@ -75,4 +76,27 @@ test_that("sequence of nodes are consistent with graph topology", {
     # ensure that all "from" nodes are sequenced before "to" nodes
     expect_equal(length(which(from_seq < to_seq)), length(from_seq))
 })
+
+test_that("get adjacency matrix is correct", {
+    xs <- c(0, 0, 1, 1, 1)
+    ys <- c(1, 0, 0, 1, -1)
+    xys <- cbind(xs, ys)
+    coord_df <- data.frame(x=xs, y=ys)
+    coord_df$id <- as.numeric(row.names(coord_df))
+      
+    p1_ids <- c(1, 2, 3, 3)
+    p2_ids <- c(2, 3, 4, 5)
+
+    line_matrix <- array(0, dim=c(4, 2, 2))
+    line_matrix[1,,] <- xys[1:2,]
+    line_matrix[2,,] <- xys[2:3,]
+    line_matrix[3,,] <- xys[3:4,]
+    line_matrix[4,,] <- xys[c(3,5),]
+
+    adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
     
+    # create lookup index into adj matrix corresponding to 
+    # expected incidence cells
+    index_array <- array(c(p1_ids, p2_ids), dim=c(length(p1_ids), 2)) 
+    expect_equal(adj_mat[index_array], c(1,1,1,1))
+})

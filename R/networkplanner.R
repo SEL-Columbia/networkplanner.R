@@ -54,15 +54,14 @@ read_networkplan = function(directory_name, debug=F) {
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
     
     # find roots and separate existing vs. planned network
+    # test code
+    # p1 <- coord_matrix[1:115,1:2,1]
+    # p2 <- coord_matrix[1:115,1:2,2]
+    # t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
+    # t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
+    # match_result <- cbind(t1,t2)
     
-    
-    
-    p1 <- coord_matrix[1:115,1:2,1]
-    p2 <- coord_matrix[1:115,1:2,2]
-    t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
-    t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
-    match_result <- cbind(t1,t2)
-    
+    # Code to create graph from network_shp
     # TODO: clean up
     line_matrix <- get_coord_matrix(network_shp)
     coord_df <- get_coord_dataframe(network_shp)
