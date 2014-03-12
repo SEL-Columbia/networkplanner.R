@@ -77,15 +77,17 @@ test_that("sequence of nodes are consistent with graph topology", {
     expect_equal(length(which(from_seq < to_seq)), length(from_seq))
 })
 
-test_that("get adjacency matrix is correct", {
+simple_coords_lines <- function() {
     xs <- c(0, 0, 1, 1, 1)
     ys <- c(1, 0, 0, 1, -1)
     xys <- cbind(xs, ys)
     coord_df <- data.frame(x=xs, y=ys)
     coord_df$id <- as.numeric(row.names(coord_df))
-      
-    p1_ids <- c(1, 2, 3, 3)
-    p2_ids <- c(2, 3, 4, 5)
+
+    # looks like this:
+    # |  |
+    #  --
+    #    |
 
     line_matrix <- array(0, dim=c(4, 2, 2))
     line_matrix[1,,] <- xys[1:2,]
@@ -93,10 +95,41 @@ test_that("get adjacency matrix is correct", {
     line_matrix[3,,] <- xys[3:4,]
     line_matrix[4,,] <- xys[c(3,5),]
 
+    line(coord_df=coord_df, line_matrix=line_matrix)
+}
+
+simple_NetworkPlan <- function() {
+    coords_lines <- simple_coords_lines()
+    line_matrix <- coords_lines@line_matrix
+    coord_df <- coords_lines@coord_df
+
+    sp_df <- SpatialPointsDataFrame(as.matrix(coord_df), proj4string=proj4str)
+    adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
+    network <- graph.adjacency(adj_mat, mode="undirected")
+    dir_network <- dominator.tree(network, root=1, mode="out")
+
+    new("NetworkPlan", nodes=sp_df, network=dir_tree)
+}
+
+
+test_that("get adjacency matrix is correct", {
+     
+    coords_lines <- simple_coords_lines()
+    line_matrix <- coords_lines@line_matrix
+    coord_df <- coords_lines@coord_df
     adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
     
     # create lookup index into adj matrix corresponding to 
     # expected incidence cells
+    p1_ids <- c(1, 2, 3, 3)
+    p2_ids <- c(2, 3, 4, 5)
     index_array <- array(c(p1_ids, p2_ids), dim=c(length(p1_ids), 2)) 
     expect_equal(adj_mat[index_array], c(1,1,1,1))
+})
+
+test_that("accumulator works", {
+
+    np <- simple_NetworkPlan()
+    np <- accumulate(np, 1, "ancestors")
+    expect_equal(np@nodes$ancestors, c(4, 3, 2, 0, 0))
 })
