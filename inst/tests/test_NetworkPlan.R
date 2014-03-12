@@ -10,6 +10,7 @@ require(geosphere)
 # TODO: is there a better system?
 test_data_dir = "../test_data/"
 stopifnot(file.exists(test_data_dir))
+proj4str <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
 
 # High-level "expect" function, can be used to check the structure of any NetworkPlan
 expect_NetworkPlan_structure <- function(np) {
@@ -35,7 +36,7 @@ naive_hav_dist_pairs <- function(A, B) {
 sample_NetworkPlan <- function() { 
     coords <- matrix(runif(20, min=-1.0, max=1.0), nrow=10, ncol=2)
     df <- data.frame(metric=runif(10, min=100000, max=1000000))
-    proj4str <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
+    df$id <- as.numeric(row.names(df))
     sp_df <- SpatialPointsDataFrame(coords, df, proj4string=proj4str)
     
     distance_pair_matrix <- naive_hav_dist_pairs(sp_df, sp_df)
@@ -95,28 +96,29 @@ simple_coords_lines <- function() {
     line_matrix[3,,] <- xys[3:4,]
     line_matrix[4,,] <- xys[c(3,5),]
 
-    line(coord_df=coord_df, line_matrix=line_matrix)
+    list(coord_df=coord_df, line_matrix=line_matrix)
 }
 
 simple_NetworkPlan <- function() {
     coords_lines <- simple_coords_lines()
-    line_matrix <- coords_lines@line_matrix
-    coord_df <- coords_lines@coord_df
-
-    sp_df <- SpatialPointsDataFrame(as.matrix(coord_df), proj4string=proj4str)
+    line_matrix <- coords_lines$line_matrix
+    coord_df <- coords_lines$coord_df
+    sample_pop <- floor(runif(nrow(coord_df), min=0, max=1000))
+    coord_attrs <- data.frame(id=coord_df$id, population=sample_pop)
+    sp_df <- SpatialPointsDataFrame(cbind(coord_df$x, coord_df$y), coord_attrs, proj4string=proj4str)
     adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
-    network <- graph.adjacency(adj_mat, mode="undirected")
-    dir_network <- dominator.tree(network, root=1, mode="out")
+    network <- graph.adjacency(adj_mat, mode="directed")
+    dir_network <- dominator.tree(network, root=1, mode="out")$domtree
 
-    new("NetworkPlan", nodes=sp_df, network=dir_tree)
+    new("NetworkPlan", nodes=sp_df, network=dir_network)
 }
 
 
 test_that("get adjacency matrix is correct", {
      
     coords_lines <- simple_coords_lines()
-    line_matrix <- coords_lines@line_matrix
-    coord_df <- coords_lines@coord_df
+    line_matrix <- coords_lines$line_matrix
+    coord_df <- coords_lines$coord_df
     adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
     
     # create lookup index into adj matrix corresponding to 
@@ -130,6 +132,14 @@ test_that("get adjacency matrix is correct", {
 test_that("accumulator works", {
 
     np <- simple_NetworkPlan()
-    np <- accumulate(np, 1, "ancestors")
-    expect_equal(np@nodes$ancestors, c(4, 3, 2, 0, 0))
+
+    # basic test of default_accumulator
+    np <- accumulate(np, 1, "num_descendents")
+    expect_equal(np@nodes$num_descendents, c(5, 4, 3, 1, 1))
+
+    # test summing downstream populations 
+    sum_pop <- function(df) { sum(df$population) }
+    np <- accumulate(np, 1, "sum_pop", accumulator=sum_pop)
+    expect_less_than(np@nodes$sum_pop[5], np@nodes$sum_pop[1])
+
 })

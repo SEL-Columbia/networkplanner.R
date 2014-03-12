@@ -178,13 +178,15 @@ setMethod("accumulate", signature(np="NetworkPlan", roots="numeric", accumulated
         apply_to_down_nodes <- function(df) { 
             down_nodes <- data.frame()
             if(length(V(np@network)[df$id])) {
-                down_nodes <- np@nodes[neighbors(np@network, df$id),]
+                down_nodes <- np@nodes[subcomponent(np@network, df$id, mode="out"),]
             }
             # now call accumulator callback
             accumulator(down_nodes)
         }
-        result <- ddply(np@nodes, apply_to_down_nodes)
-        np@nodes <- merge(np@nodes, result, by="id")
+        result <- adply(np@nodes, 1, apply_to_down_nodes)
+        # result should be aligned with np@nodes, so just
+        # bind the 2nd col of result to the new field
+        np@nodes[[accumulated_field]] <- result[,2]
         np
     }
 )
