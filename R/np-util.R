@@ -30,3 +30,36 @@ get_adjacency_matrix <- function(line_matrix, coord_df) {
     adj_matrix
 }
  
+# Get the co-ordinate matrix out of a SpatialLinesDataFrame (as a three dimensional array)
+# Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
+get_coord_matrix = function(sldf) {
+    # Looping through every line slot in SLDF object 
+    # and save the 2X2 matrix representation of a single edge into 2 3D array. 
+    line_coords <- lapply(sldf@lines, function(l) {
+        
+        lapply(l@Lines, function(segment) {
+            my_coords <- segment@coords
+            n <- dim(my_coords)[1]
+            if(n == 2){
+                array(data=t(my_coords), dim=c(1,2,2))
+            }else{
+                laply(1:(n-1), function(row_num){
+                    cbind(my_coords[row_num, ], my_coords[row_num+1, ])
+                })    
+            }
+            
+        })    
+    })
+    # Looping through every cell in the nested list structure and concatenate the 3D arrays 
+    # into the master coordinate array that Adjacency matrix function takes
+    line_coords <- do.call(abind, list(lapply(
+        line_coords, function(l){ 
+            do.call(abind, list(l, along=1))
+        }),
+        along=1))
+    
+    # Safety measure to make sure that the coordinate matrix is Nx2x2, 
+    # in which N is the number of sigle point in SLDF
+    stopifnot(dim(line_coords)[2:3] == c(2,2))
+    return(line_coords)
+}
