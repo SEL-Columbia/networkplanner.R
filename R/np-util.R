@@ -63,3 +63,21 @@ get_coord_matrix = function(sldf) {
     stopifnot(dim(line_coords)[2:3] == c(2,2))
     return(line_coords)
 }
+
+
+# Depricated get_coord_matrix fucntion keeping here for testing purpose for now
+# TO DO: turn it into test
+# get_coord_matrix = function(sldf) {
+#     line_coords <- laply(sldf@lines, function(l) { l@Lines[[1]]@coords })
+#     stopifnot(dim(line_coords)[2:3] == c(2,2))
+#     line_coords
+# }
+
+
+# To Do: combine the following chunk with adjancey matrix function to increase speed
+# coord_matrix <- get_coord_matrix(network_shp)
+# p1 <- coord_matrix[1:dim(coord_matrix)[1],1,1:2]
+# p2 <- coord_matrix[1:dim(coord_matrix)[1],2,1:2]
+# t1 <- match(p1, nodes@coords)
+# t2 <- match(p2, nodes@coords)
+# match_result <- cbind(t1,t2)
