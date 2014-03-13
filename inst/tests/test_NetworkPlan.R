@@ -1,7 +1,6 @@
 require(testthat)
 require(networkplanner)
 require(sp)
-require(spdep)
 require(igraph)
 require(geosphere)
 #' @include np-utils.R
