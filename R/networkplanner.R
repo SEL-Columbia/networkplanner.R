@@ -48,7 +48,7 @@ read_networkplan = function(directory_name, debug=F) {
     proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
     nodes <- SpatialPointsDataFrame(coords=metrics_csv[,c("X","Y")], data=metrics_csv,
                                     proj4string=CRS(proj4string))
-    nodes$id <- row.names(nodes) # note: this is assumed in the matching code later
+    nodes$id <- as.numeric(row.names(nodes)) # note: this is assumed in the matching code later
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
@@ -83,7 +83,7 @@ read_networkplan = function(directory_name, debug=F) {
     ## TODO: figure out intersection points, with the following objectives:
     ## determine is_root for each node
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
-    network_graph
+    new("NetworkPlan", nodes=nodes, network=network_graph)
 }
 
 # Get the co-ordinate matrix out of a SpatialLinesDataFrame (as a three dimensional array)
@@ -100,7 +100,16 @@ get_coord_matrix = function(sldf) {
 #' @param node_df SpatialPointsDataFrame to apply selection to
 #' @return subset of the node_df
 default_selector <- function(node_df) {
-    node_df[min(node_df$vid)==node_df$vid,]
+    node_df[min(node_df$id)==node_df$id,]
+}
+
+#' Default accumulator for accumulate method
+#' This calculates the count of all downstream nodes
+#' 
+#' @param node_df SpatialPointsDataFrame to accumulate values from
+#' @return subset of the node_df
+default_accumulator <- function(node_df) {
+    nrow(node_df)
 }
 
 #' Sequence a NetworkPlan via breadth-first search from roots
@@ -108,6 +117,7 @@ default_selector <- function(node_df) {
 #' of SpatialPoints)
 #'
 #' @param np a NetworkPlan
+#'        TODO:  Remove roots once we set them in read method
 #' @param roots the indices of root vertices to sequence from
 #' @param selector function that returns which vertex (by id) in the
 #'        "frontier" of the search gets selected next based on 
@@ -122,10 +132,9 @@ setMethod("sequence", signature(np="NetworkPlan", roots="numeric"),
         nodes <- np@nodes
         # setup node dataframe with vid (vertex id) field
         # for backrefs
-        nodes$vid <- as.numeric(row.names(nodes))
         frontier_df <- nodes[frontier,]
         # keep track of the sequence of the nodes
-        selected <- selector(frontier_df)$vid
+        selected <- selector(frontier_df)$id
         # node_sequence a vector whose position represents the sequence index
         # of the node and the value in the position is the node/vertex id
         node_sequence <- selected
@@ -134,16 +143,50 @@ setMethod("sequence", signature(np="NetworkPlan", roots="numeric"),
         while(length(frontier)) {
             frontier_df <- nodes[frontier,]
             # keep track of the sequence of the nodes
-            selected <- selector(frontier_df)$vid
+            selected <- selector(frontier_df)$id
             node_sequence <- append(node_sequence, selected)
             # frontier <- (frontier - selected) + new_neighbors
             frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
         }
+
         # now apply the sequence back
         np@nodes[node_sequence, "sequence"] <- 1:length(np@nodes)
         np
     }
 )
-        
-        
-        
+
+#' Accumulate "downstream" nodal values into a summary value
+#' for "this" node. 
+#' NOTE:  NetworkPlan should be directed from the roots prior
+#'        to running. 
+#'
+#' @param np a NetworkPlan
+#'        TODO:  Remove roots once we set them in read method
+#' @param roots the indices of root vertices to accumulate from
+#' @param accumulated_field name of field to set accumulated value
+#' @param accumulator function that summarizes or combines all downstream
+#'        node values into a single value attributed to "this" node
+#'        (defined by the 'accumulated_field' name)
+#'        takes a SpatialPointsDataFrame
+#' @return A NetworkPlan whose nodes SpatialPointsDataFrame has an accumulated_field 
+#'         column and values
+#' @export
+setGeneric("accumulate", function(np, roots, accumulated_field, accumulator=default_accumulator) standardGeneric("accumulate"))
+setMethod("accumulate", signature(np="NetworkPlan", roots="numeric", accumulated_field="character"), 
+    function(np, roots, accumulated_field, accumulator=default_accumulator) {
+        #inner function to "unravel" the dataframe before passing to the accumulator  
+        apply_to_down_nodes <- function(df) { 
+            down_nodes <- data.frame()
+            if(length(V(np@network)[df$id])) {
+                down_nodes <- np@nodes[subcomponent(np@network, df$id, mode="out"),]
+            }
+            # now call accumulator callback
+            accumulator(down_nodes)
+        }
+        result <- adply(np@nodes, 1, apply_to_down_nodes)
+        # result should be aligned with np@nodes, so just
+        # bind the 2nd col of result to the new field
+        np@nodes[[accumulated_field]] <- result[,2]
+        np
+    }
+)
