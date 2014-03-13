@@ -3,6 +3,8 @@ require(igraph)
 require(rgdal)
 require(stringr)
 require(plyr)
+require(abind)
+
 #' @include np-utils.R
 
 # Workaround for using igraph in an s4 object slot
@@ -52,15 +54,7 @@ read_networkplan = function(directory_name, debug=F) {
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
-    
-    # find roots and separate existing vs. planned network
-    # test code
-    # p1 <- coord_matrix[1:115,1:2,1]
-    # p2 <- coord_matrix[1:115,1:2,2]
-    # t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
-    # t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
-    # match_result <- cbind(t1,t2)
-    
+     
     # Code to create graph from network_shp
     # TODO: clean up
     line_matrix <- get_coord_matrix(network_shp)
@@ -86,13 +80,6 @@ read_networkplan = function(directory_name, debug=F) {
     new("NetworkPlan", nodes=nodes, network=network_graph)
 }
 
-# Get the co-ordinate matrix out of a SpatialLinesDataFrame (as a three dimensional array)
-# Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
-get_coord_matrix = function(sldf) {
-    line_coords <- laply(sldf@lines, function(l) { l@Lines[[1]]@coords })
-    stopifnot(dim(line_coords)[2:3] == c(2,2))
-    line_coords
-}
 
 #' Default selector for sequence method
 #' This simply selects the node with the smallest vertex id
