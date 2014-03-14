@@ -57,23 +57,30 @@ read_networkplan = function(directory_name, debug=F) {
      
     # Code to create graph from network_shp
     # TODO: clean up
+
     line_matrix <- get_coord_matrix(network_shp)
     coord_df <- get_coord_dataframe(network_shp)
-    coord_df$id <- as.numeric(row.names(coord_df))
     network_adj_matrix <- get_adjacency_matrix(line_matrix, coord_df)
     network_graph <- graph.adjacency(network_adj_matrix, mode="undirected")
 
-    #TODO:  find "roots" and create "dominator trees" from them
-    if(FALSE) {
-    p1 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,1])
-    p1$FID <- row.names(p1)
-    p2 <- as.data.frame(coord_matrix[1:nrow(network_shp),1:2,2])
-    p2$FID <- row.names(p2)
-    p1 <- merge(p1, as.data.frame(cbind(nodes@coords, id=nodes$id)), 
-            by.x=c(1,2), by.y=c("X","Y"), all.x=TRUE)
-    p2 <- merge(p2, as.data.frame(cbind(nodes@coords, id=nodes$id)), 
-                by.x=c(1,2), by.y=c("X","Y"), all.x=TRUE)
-    } 
+    V(network_graph)$name <- coord_df$id
+    V(network_graph)$type <- letters[1:2:3]
+    
+    V(network_graph)[V(network_graph)$type == "a"]
+    
+    plot(network_graph, vertex.size=2)
+    
+    nwg_df <- get.data.frame(network_graph, what=c("vertices"))
+    edg_df <- get.data.frame(network_graph, what=c("edges"))
+
+    nwg_df <- merge(nwg_df, coord_df, by.x="name", by.y="id")
+    nwg_df <- merge(nwg_df, metrics_csv, by.x=c("x", "y"), by.y=c("X", "Y"), all.x=TRUE)
+    
+    new_graph <- graph.data.frame(edg_df, directed=FALSE)
+
+    plot(new_graph, vertex.size=2)
+
+
     ## TODO: figure out intersection points, with the following objectives:
     ## determine is_root for each node
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
