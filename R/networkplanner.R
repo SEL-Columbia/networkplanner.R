@@ -16,8 +16,8 @@ setClass("NetworkPlan", representation(nodes="SpatialPointsDataFrame",
 # Handle case with an existing_network as a subclass for now 
 # There's probably a better way to handle it, but without this R complains
 # about the existing_network slot being empty if there's nothing there
-setClass("NetworkPlanEx", representation(existing_network="SpatialLinesDataFrame"),
-                                        contains="NetworkPlan")
+# setClass("NetworkPlanEx", representation(existing_network="SpatialLinesDataFrame"),
+#                                        contains="NetworkPlan")
 
 
 #' Download scenario from networkplanner into the given directory
@@ -46,45 +46,32 @@ read_networkplan = function(directory_name, debug=F) {
     base_dir = normalizePath(directory_name)
     
     # read nodes and assign id
-    metrics_csv <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
+    metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
     proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
-    nodes <- SpatialPointsDataFrame(coords=metrics_csv[,c("X","Y")], data=metrics_csv,
+    nodes <- SpatialPointsDataFrame(coords=metrics_df[,c("X","Y")], data=metrics_df,
                                     proj4string=CRS(proj4string))
     nodes$id <- as.numeric(row.names(nodes)) # note: this is assumed in the matching code later
+    
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
      
-    # Code to create graph from network_shp
-    # TODO: clean up
+    segment_matrix <- get_segment_matrix(network_shp)
+    network <- create_graph(metrics_df, segment_matrix) 
 
-    line_matrix <- get_coord_matrix(network_shp)
-    coord_df <- get_coord_dataframe(network_shp)
-    network_adj_matrix <- get_adjacency_matrix(line_matrix, coord_df)
-    network_graph <- graph.adjacency(network_adj_matrix, mode="undirected")
-
-    V(network_graph)$name <- coord_df$id
-    V(network_graph)$type <- letters[1:2:3]
-    
-    V(network_graph)[V(network_graph)$type == "a"]
-    
-    plot(network_graph, vertex.size=2)
-    
-    nwg_df <- get.data.frame(network_graph, what=c("vertices"))
-    edg_df <- get.data.frame(network_graph, what=c("edges"))
-
-    nwg_df <- merge(nwg_df, coord_df, by.x="name", by.y="id")
-    nwg_df <- merge(nwg_df, metrics_csv, by.x=c("x", "y"), by.y=c("X", "Y"), all.x=TRUE)
-    
-    new_graph <- graph.data.frame(edg_df, directed=FALSE)
-
-    plot(new_graph, vertex.size=2)
-
-
-    ## TODO: figure out intersection points, with the following objectives:
+    ## TODO: 
+    ## Find all "fake" nodes
+    fake_vids <- V(network)[is.na(V(network)$nid)]$vid
+    reachable_from_fake <- unique(do.call(c, lapply(fake_vids, function(x) { subcomponent(network, x, mode="ALL") })))
+    # reachable_from_fake <- subcomponent(network, fake_vids, mode="ALL")
+    unreachable <- setdiff(as.numeric(V(network)), reachable_from_fake)
+    unreachable_subgraph <- subgraph(network, unreachable)
+      
+    ## Create dominator.tree for each fake node
+    ## Handle subnets without "fake" nodes
     ## determine is_root for each node
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
-    new("NetworkPlan", nodes=nodes, network=network_graph)
+    new("NetworkPlan", nodes=nodes, network=network)
 }
 
 
