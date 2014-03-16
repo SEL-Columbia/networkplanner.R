@@ -68,6 +68,11 @@ get_segment_matrix = function(sldf) {
     return(line_coords)
 }
 
+my_g_plot <- function(g, id) {
+    png(paste("plots/plot", id, ".png", sep=""), width=1000, height=1000)
+    plot(g, vertex.size=4)
+    dev.off()
+}
  
 test_edge_pairs <- function(segment_node_df, p1, p2, network) {
     p1_p2 <- data.frame(cbind(p1, p2))
@@ -94,6 +99,9 @@ create_graph <- function(metrics_df, segment_matrix) {
     network_adj_matrix <- get_adjacency_matrix(segment_matrix, segment_node_df)
     network <- graph.adjacency(network_adj_matrix, mode="undirected")
     #vid and vertex index match. add explicit vid field to track
+    #NOTE:  This vid field is NOT required outside this function
+    #       It's only used for accounting between vertices and
+    #       segment nodes temporarily
     V(network)$vid <- segment_node_df$id
 
     # now assign metrics_df attributes back to vertices
@@ -117,10 +125,11 @@ create_graph <- function(metrics_df, segment_matrix) {
     # it
     vertex_df <- vertex_df[,vertex_names]
     names(vertex_df)[1] <- "edge_link_id"
-    vertex_df$vid <- vertex_df$edge_link_id
     
     #TODO:  do we want directed/undirected here?
     network <- graph.data.frame(edge_df, directed=FALSE, vertex_df)
+    #reset names to be consistent with vertex indices
+    V(network)$name <- as.numeric(V(network))
     network
 }
     

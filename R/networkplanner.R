@@ -61,11 +61,11 @@ read_networkplan = function(directory_name, debug=F) {
 
     ## TODO: 
     ## Find all "fake" nodes
-    fake_vids <- V(network)[is.na(V(network)$nid)]$vid
+    fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
     reachable_from_fake <- unique(do.call(c, lapply(fake_vids, function(x) { subcomponent(network, x, mode="ALL") })))
     # reachable_from_fake <- subcomponent(network, fake_vids, mode="ALL")
     unreachable <- setdiff(as.numeric(V(network)), reachable_from_fake)
-    unreachable_subgraph <- subgraph(network, unreachable)
+    unreachable_subgraph <- induced.subgraph(network, unreachable)
       
     ## Create dominator.tree for each fake node
     ## Handle subnets without "fake" nodes
