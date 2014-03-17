@@ -67,9 +67,27 @@ read_networkplan = function(directory_name, debug=F) {
     unreachable <- setdiff(as.numeric(V(network)), reachable_from_fake)
     unreachable_subgraph <- induced.subgraph(network, unreachable)
       
-    ## Create dominator.tree for each fake node
+   
+    # Identify the root vertex by finding 1st order neighbor of fake_node/ fake_vid
+    # Assign is_root Boolean value based on preceeding rule
+    root_id <- sapply(neighborhood(network, order=1, fake_vids, mode="ALL"), function(x){x[2]})
+    V(network)[V(network) %in% root_id]$is_root <- TRUE
+    V(network)$is_root <- ifelse(V(network) %in% root_id,  TRUE, FALSE)
+    
+    
+    ## TODO: 
     ## Handle subnets without "fake" nodes
-    ## determine is_root for each node
+    ## Create dominator.tree for each fake node
+    plot(network, vertex.size=4)
+    new_network <- as.directed(network, mode="mutual")
+    my_dom_tree <- dominator.tree(new_network, root=58, mode="in")
+    plot(my_dom_tree[[2]], vertex.size=4,vertex.label=NULL,edge.arrow.size=0.1)
+    
+    
+    png("./sample_58.png", width=1000, height=1000)
+    plot(my_dom_tree[[2]], vertex.size=5,vertex.label=NULL,edge.arrow.size=0.7)
+    dev.off()
+    
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
     new("NetworkPlan", nodes=nodes, network=network)
 }
