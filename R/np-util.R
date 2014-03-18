@@ -68,9 +68,19 @@ get_segment_matrix = function(sldf) {
     return(line_coords)
 }
 
-my_g_plot <- function(g, id) {
+my_g_plot <- function(g, id, transform=FALSE) {
+    # get coords in mercator proj
+    vec_df <- get.data.frame(g, what="vertices")
+    xy <- vec_df[,c("X", "Y")]
+    coordinates(xy) <- ~X+Y
+    proj4string(xy) <- CRS("+proj=longlat +ellps=WGS84")
+    xy <- spTransform(xy, CRS("+proj=merc +ellps=WGS84"))
     png(paste("plots/plot", id, ".png", sep=""), width=1000, height=1000)
-    plot(g, vertex.size=4)
+    if(transform) {
+        plot(g, layout=xy@coords, vertex.size=4)
+    } else {
+        plot(g, vertex.size=4)
+    }
     dev.off()
 }
  
@@ -133,6 +143,69 @@ create_graph <- function(metrics_df, segment_matrix) {
     network
 }
     
+# get 2 subgraphs:
+# connected:  The graph reachable from "fake" nodes
+# disconnected:  The graph that is not reachable from "fake" nodes
+separate_subgraphs <- function(network) {
+    fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
+    reachable <- unique(do.call(c, lapply(fake_vids, function(x) { subcomponent(network, x, mode="ALL") })))
+    connected_subgraph <- induced.subgraph(network, reachable)
+    unreachable <- setdiff(as.numeric(V(network)), reachable)
+    disconnected_subgraph <- induced.subgraph(network, unreachable)
+    l <- list(connected=connected_subgraph, 
+              disconnected=disconnected_subgraph)
+    l
+}
+ 
+# Just choose the 1st vertex for now
+default_root_selector <- function(graph) {
+    as.numeric(V(graph)[1])
+}
+
+# From full graph with undirected edges and node ids (i.e. that 
+# returned by create_graph), create directed graph with "fake" nodes and
+# "root" nodes
+create_directed_trees <- function(network, root_selector=default_root_selector) {
+    # first, find the connected and disconnected subgraps
+    subgraphs <- separate_subgraphs(network)
+    connected <- subgraphs$connected
+    disconnected <- subgraphs$disconnected
+
+    # now find the roots of the connected subgraph
+    fake_vids <- as.numeric(V(connected)[is.na(V(connected)$nid)])
+
+    # Is it safe to assume all fake vertices have a neighbor?  
+    # I think so (otherwise they won't be in network)
+    root_id <- sapply(neighborhood(connected, order=1, fake_vids, mode="ALL"), function(x){x[2]})
+    V(connected)[V(connected) %in% root_id]$is_root <- TRUE
+    V(connected)$is_root <- ifelse(V(connected) %in% root_id,  TRUE, FALSE)
+
+    # Now get all subgraphs from fake vertices for connected net
+    # make them directed and union them back together
+    get_directed_subgraph <- function(vid, graph) {
+        subgraph_vids <- subcomponent(graph, vid, mode="ALL")
+        directed <- as.directed(graph, mode="mutual")
+        result <- dominator.tree(directed, vid, mode="out")
+        dom_tree <- result$domtree
+        directed_subgraph <- induced.subgraph(dom_tree, result@leftout)
+    }
+    connected_subgraphs <- lapply(fake_vids, get_directed_subgraph, var2=connected)
+    # reduce these into a single graph
+    connected_directed_graph <- graph.union(connected_subgraphs)
+
+    # Now work on disconnected net
+    # Assumes decompose retains vertex ids
+    disconnected_subgraphs <- decompose.graph(disconnected)
+    disconnected_roots <- sapply(disconnected_list, root_selector) 
+    disconnected_directed_graph <- lapply(disconnected_roots, 
+                                          get_directed_subgraph, 
+                                          var2=disconnected)
+ 
+    # combine disconnected and connected and return
+    graph.union(connected_directed_graph, disconnected_directed_graph)
+
+}
+
 #     # Merge with node df and detecting ghost nodes & roots
 # #     t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
 # #     t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))

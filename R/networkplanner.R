@@ -59,6 +59,12 @@ read_networkplan = function(directory_name, debug=F) {
     segment_matrix <- get_segment_matrix(network_shp)
     network <- create_graph(metrics_df, segment_matrix) 
 
+    # Now create directed graph from "fake" nodes (for trees connected
+    # to the existing network) and "roots" (for trees that are NOT connected)
+    # TODO:  Needs testing and assign to new NetworkPlan
+    network <- create_directed_trees(network)
+    
+    # TODO:  All below can be removed once above works
     ## TODO: 
     ## Find all "fake" nodes
     fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
