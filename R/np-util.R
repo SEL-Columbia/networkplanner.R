@@ -68,24 +68,6 @@ get_segment_matrix = function(sldf) {
     return(line_coords)
 }
 
-my_g_plot <- function(g, id, transform=FALSE) {
-    # get coords in mercator proj
-    vec_df <- get.data.frame(g, what="vertices")
-    xy <- vec_df[,c("X", "Y")]
-    coordinates(xy) <- ~X+Y
-    proj4string(xy) <- CRS("+proj=longlat +ellps=WGS84")
-    xy <- spTransform(xy, CRS("+proj=merc +ellps=WGS84"))
-    png(paste("plots/plot", id, ".png", sep=""), 
-        type="cairo-png", 
-        width=1000, height=1000)
-    if(transform) {
-        plot(g, layout=xy@coords, vertex.size=4, edge.arrow.size=1)
-    } else {
-        plot(g, vertex.size=4, edge.arrow.size=1)
-    }
-    dev.off()
-}
- 
 test_edge_pairs <- function(segment_node_df, p1, p2, network) {
     p1_p2 <- data.frame(cbind(p1, p2))
     names(p1_p2) <- c("X1", "Y1", "X2", "Y2")
@@ -213,73 +195,23 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
                                               get_directed_subgraph, 
                                               disconnected)
     
-    # combine connected/disconnected directed graphs
+    # reduce connected/disconnected directed graphs
     # NOTE:  We do a "disjoint" union here as there will not be
     #        any overlap between graphs (this works much faster with
     #        no messy added attributes)
+    #        disjoint runs in seconds rather than minutes for graph.union
     # TODO:  Do we want to keep these separate?  
     connected_directed_graph <- graph.disjoint.union(connected_directed_subgraphs)
     disconnected_directed_graph <- graph.disjoint.union(disconnected_directed_subgraphs)
 
-    # reduce both connected and disconnected graphs into the full graph object
-    # union 2 large graph object on my computer takes 90 seconds, however 
-    # unioning multiple small graphs takes only 3 seconds ;)
-    combine_directed_graph <- graph.disjoint.union(connected_directed_graph, 
+    # return the combined directed graph
+    combined_directed_graph <- graph.disjoint.union(connected_directed_graph, 
                                                    disconnected_directed_graph)
 
-   # Visualize our graph for validation 
-   # TODO: remove it !
-   # plot(combine_directed_graph, vertex.size=4, edge.arrow.size=0.1)
-   
+  
 }
 
-#     # Merge with node df and detecting ghost nodes & roots
-# #     t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
-# #     t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
-# #     match_result <- cbind(t1,t2)
-
-# Depricated get_coord_matrix fucntion keeping here for testing purpose for now
-# TO DO: turn it into test
-# get_coord_matrix = function(sldf) {
-#     line_coords <- laply(sldf@lines, function(l) { l@Lines[[1]]@coords })
-#     stopifnot(dim(line_coords)[2:3] == c(2,2))
-#     line_coords
-# }
-
-
-# To Do: combine the following chunk with adjancey matrix function to increase speed
-# get_adjacency_matrix2 <- function(network_shp){
-#     
-#     line_matrix <- get_coord_matrix(network_shp)
-#     p1 <- line_matrix[1:dim(line_matrix)[1],1,1:2]
-#     p2 <- line_matrix[1:dim(line_matrix)[1],2,1:2]
-#     
-#     # Merge with node df and detecting ghost nodes & roots
-# #     t1 <- match(data.frame(t(p1)), data.frame(t(nodes@coords)))
-# #     t2 <- match(data.frame(t(p2)), data.frame(t(nodes@coords)))
-# #     match_result <- cbind(t1,t2)
-#     
-#     # merge with coordinate matrix(unique) and get the rowname/id
-# #     coord_df<- data.frame(t(unique(rbind(p1,p2))))
-# 
-#     coord_df <- t(get_coord_dataframe(network_shp))
-#     index_array1 <- cbind(match(data.frame(t(p1)), coord_df), 
-#                      match(data.frame(t(p2)), coord_df))
-# #     index_array2 <- cbind(match(data.frame(t(p2)), coord_df),
-# #                           match(data.frame(t(p1)), coord_df))
-#     
-#     
-#     # Creating the adj matrix
-#     adj_matrix <- matrix(nrow=ncol(coord_df), ncol=ncol(coord_df), data=0)
-#     adj_matrix[index_array1] <- 1
-#     adj_matrix[index_array1[,c(2,1)]] <- 1
-#     
-#     return(adj_matrix)
-# }
-# 
-# my_graph <- graph.adjacency(get_adjacency_matrix(network_shp), mode="undirected")
-# plot(my_graph)
-# 
+# Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),
 #                              adj2 = get_adjacency_matrix(line_matrix=get_coord_matrix(network_shp), coord_df=get_coord_dataframe(network_shp)),
 #                              unit="ms", times=1000)
@@ -288,4 +220,3 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
 # summary(bench_mark)
 # qplot(y=time, data=bench_mark, colour=expr) + scale_y_log10()
 
-tmp <- function() { 1 }
