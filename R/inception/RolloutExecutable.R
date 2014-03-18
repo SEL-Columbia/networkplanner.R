@@ -2,17 +2,17 @@
 #while denoting each unique branch they're originating from 
 #using an implementation of Prim's algorithm on the proposed.grid network.  
 
-setwd("~/github/networkplanner.R/")
-source('R/Sequencing/CommonRolloutFunctions.R')
+setwd("~/github/networkplanner.R/inst/test_data/108/")
+source('R/inception/CommonRolloutFunctions.R')
 
 ##1.0 - Import metrics.local for only grid-proposed nodes -> local.grid
 #load metrics.local to associated settlement points with proposed grid data
-local <- read.csv("test_data/metrics-local.csv", skip=1) #RUNTIME ~ 00:28 mins
+local <- read.csv("metrics-local.csv", skip=1) #RUNTIME ~ 00:28 mins
 local$Settlement.id <- rownames(local) #use generic row names for unique ID of each unique settlement point
 
-proj4 <- read.csv("test_data/metrics-local.csv", nrows=1, header = FALSE)
+proj4 <- read.csv("metrics-local.csv", nrows=1, header = FALSE)
 
-proposed <- readShapeLines("test_data/networks-proposed.shp") #RUNTIME ~ 00:08 mins
+proposed <- readShapeLines("networks-proposed.shp") #RUNTIME ~ 00:08 mins
 
 
 #Use output of priortized.grid function as input to far-sighted optimized rollout algorithim 
