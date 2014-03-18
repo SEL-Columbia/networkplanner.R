@@ -177,7 +177,6 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # Is it safe to assume all fake vertices have a neighbor?  
     # I think so (otherwise they won't be in network)
     root_id <- sapply(neighborhood(connected, order=1, fake_vids, mode="ALL"), function(x){x[2]})
-    V(connected)[V(connected) %in% root_id]$is_root <- TRUE
     V(connected)$is_root <- ifelse(V(connected) %in% root_id,  TRUE, FALSE)
 
     # Now get all subgraphs from fake vertices for connected net
@@ -187,12 +186,25 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
         directed <- as.directed(graph, mode="mutual")
         result <- dominator.tree(directed, vid, mode="out")
         dom_tree <- result$domtree
-        directed_subgraph <- induced.subgraph(dom_tree, result@leftout)
+        # I made this quick hack to make it work here
+        # TODO: Figure out some solid way to generate directed_subgraph
+        directed_subgraph <- induced.subgraph(dom_tree, 
+                                              which(!is.na(result$dom)))
+        # We should write a test to make sure that 
+        # num_vertex(directed_subgraph)  + length(reseult) == num_vertex(directed)
+        # and num_vertex(directed_subgraph) == num_non_na_elements(result$dom)
     }
-    connected_subgraphs <- lapply(fake_vids, get_directed_subgraph, var2=connected)
+    # use ... contruct to pass additional argument to the map function
+    # or using verbose function(x){get_directed_subgraph(x, connected) } style 
+    # TODO: rewrite the next line
+    connected_subgraphs <- lapply(fake_vids, get_directed_subgraph, connected)
     # reduce these into a single graph
     connected_directed_graph <- graph.union(connected_subgraphs)
 
+    # Temporary visualization for validation within this function
+    # TODO: remove in production code base
+    plot(connected_directed_graph, vertex.size=4, edge.arrow.size=0.1)
+    
     # Now work on disconnected net
     # Assumes decompose retains vertex ids
     disconnected_subgraphs <- decompose.graph(disconnected)
