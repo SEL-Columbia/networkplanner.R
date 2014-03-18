@@ -75,11 +75,13 @@ my_g_plot <- function(g, id, transform=FALSE) {
     coordinates(xy) <- ~X+Y
     proj4string(xy) <- CRS("+proj=longlat +ellps=WGS84")
     xy <- spTransform(xy, CRS("+proj=merc +ellps=WGS84"))
-    png(paste("plots/plot", id, ".png", sep=""), width=1000, height=1000)
+    png(paste("plots/plot", id, ".png", sep=""), 
+        type="cairo-png", 
+        width=1000, height=1000)
     if(transform) {
-        plot(g, layout=xy@coords, vertex.size=4)
+        plot(g, layout=xy@coords, vertex.size=4, edge.arrow.size=1)
     } else {
-        plot(g, vertex.size=4)
+        plot(g, vertex.size=4, edge.arrow.size=1)
     }
     dev.off()
 }
@@ -194,42 +196,40 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
         # num_vertex(directed_subgraph)  + length(reseult) == num_vertex(directed)
         # and num_vertex(directed_subgraph) == num_non_na_elements(result$dom)
     }
-    # use ... contruct to pass additional argument to the map function
-    # or using verbose function(x){get_directed_subgraph(x, connected) } style 
-    # TODO: rewrite the next line
-    connected_subgraphs <- lapply(fake_vids, get_directed_subgraph, connected)
+    # Create directed connected subgraph list
+    connected_directed_subgraphs <- lapply(fake_vids, 
+                                           get_directed_subgraph, 
+                                           connected)
 
     # Temporary visualization for validation within this function
     # TODO: remove in production code base
-    plot(connected_directed_graph, vertex.size=4, edge.arrow.size=0.1)
+    # plot(connected_directed_graph, vertex.size=4, edge.arrow.size=0.1)
     
     # Now work on disconnected net
     # Assumes decompose retains vertex ids
     disconnected_subgraphs <- decompose.graph(disconnected)
-    
-    # I change disconnected_list -----> disconnected_subgraphs
-    # Correct this line if i'm wrong
-    
     disconnected_roots <- sapply(disconnected_subgraphs, root_selector) 
+    disconnected_directed_subgraphs <- lapply(disconnected_roots, 
+                                              get_directed_subgraph, 
+                                              disconnected)
     
-    # same as line:97-line:100
-    disconnected_graph <- lapply(disconnected_roots, 
-                                          get_directed_subgraph, 
-                                          disconnected)
-    
-    ## I think we should add disconnected_directed_graph as the union of 
-    # all collections of disconnected_graph to maintain the structure we 
-    # used in connected_directed_graph section
-    disconnected_directed_graph <- graph.union(disconnected_graph)
+    # combine connected/disconnected directed graphs
+    # NOTE:  We do a "disjoint" union here as there will not be
+    #        any overlap between graphs (this works much faster with
+    #        no messy added attributes)
+    # TODO:  Do we want to keep these separate?  
+    connected_directed_graph <- graph.disjoint.union(connected_directed_subgraphs)
+    disconnected_directed_graph <- graph.disjoint.union(disconnected_directed_subgraphs)
 
     # reduce both connected and disconnected graphs into the full graph object
     # union 2 large graph object on my computer takes 90 seconds, however 
     # unioning multiple small graphs takes only 3 seconds ;)
-   combine_directed_graph <- graph.union(connected_subgraphs, disconnected_graph)
+    combine_directed_graph <- graph.disjoint.union(connected_directed_graph, 
+                                                   disconnected_directed_graph)
 
    # Visualize our graph for validation 
    # TODO: remove it !
-   plot(combine_directed_graph, vertex.size=4, edge.arrow.size=0.1)
+   # plot(combine_directed_graph, vertex.size=4, edge.arrow.size=0.1)
    
 }
 
