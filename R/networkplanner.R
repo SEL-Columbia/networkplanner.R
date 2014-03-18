@@ -64,6 +64,12 @@ read_networkplan = function(directory_name, debug=F) {
     # TODO:  Needs testing and assign to new NetworkPlan
     network <- create_directed_trees(network)
     
+    
+    #####
+    # The above works now! please double oh triple check and 
+    # remove the following chunk ;)
+    #####
+    
     # TODO:  All below can be removed once above works
     ## TODO: 
     ## Find all "fake" nodes

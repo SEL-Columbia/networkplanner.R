@@ -198,8 +198,6 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # or using verbose function(x){get_directed_subgraph(x, connected) } style 
     # TODO: rewrite the next line
     connected_subgraphs <- lapply(fake_vids, get_directed_subgraph, connected)
-    # reduce these into a single graph
-    connected_directed_graph <- graph.union(connected_subgraphs)
 
     # Temporary visualization for validation within this function
     # TODO: remove in production code base
@@ -208,14 +206,31 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # Now work on disconnected net
     # Assumes decompose retains vertex ids
     disconnected_subgraphs <- decompose.graph(disconnected)
-    disconnected_roots <- sapply(disconnected_list, root_selector) 
-    disconnected_directed_graph <- lapply(disconnected_roots, 
+    
+    # I change disconnected_list -----> disconnected_subgraphs
+    # Correct this line if i'm wrong
+    
+    disconnected_roots <- sapply(disconnected_subgraphs, root_selector) 
+    
+    # same as line:97-line:100
+    disconnected_graph <- lapply(disconnected_roots, 
                                           get_directed_subgraph, 
-                                          var2=disconnected)
- 
-    # combine disconnected and connected and return
-    graph.union(connected_directed_graph, disconnected_directed_graph)
+                                          disconnected)
+    
+    ## I think we should add disconnected_directed_graph as the union of 
+    # all collections of disconnected_graph to maintain the structure we 
+    # used in connected_directed_graph section
+    disconnected_directed_graph <- graph.union(disconnected_graph)
 
+    # reduce both connected and disconnected graphs into the full graph object
+    # union 2 large graph object on my computer takes 90 seconds, however 
+    # unioning multiple small graphs takes only 3 seconds ;)
+   combine_directed_graph <- graph.union(connected_subgraphs, disconnected_graph)
+
+   # Visualize our graph for validation 
+   # TODO: remove it !
+   plot(combine_directed_graph, vertex.size=4, edge.arrow.size=0.1)
+   
 }
 
 #     # Merge with node df and detecting ghost nodes & roots
