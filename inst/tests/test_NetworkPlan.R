@@ -68,7 +68,7 @@ test_that("sequence of nodes are consistent with graph topology", {
     np <- sample_NetworkPlan()
     # strange that a Vertex sequence cannot auto-cast itself to a numeric
     roots <- as.numeric(V(np@network)[degree(np@network, mode="in")==0])
-    np <- sequence(np, roots)
+    np <- sequence_plan(np, roots)
     e_list <- get.edgelist(np@network)
     from_seq <- np@nodes$sequence[e_list[,1]]
     to_seq <- np@nodes$sequence[e_list[,2]]
@@ -81,7 +81,7 @@ simple_coords_lines <- function() {
     xs <- c(0, 0, 1, 1, 1)
     ys <- c(1, 0, 0, 1, -1)
     xys <- cbind(xs, ys)
-    coord_df <- data.frame(x=xs, y=ys)
+    coord_df <- data.frame(X=xs, Y=ys)
     coord_df$id <- as.numeric(row.names(coord_df))
 
     # looks like this:
@@ -104,10 +104,11 @@ simple_NetworkPlan <- function() {
     coord_df <- coords_lines$coord_df
     sample_pop <- floor(runif(nrow(coord_df), min=0, max=1000))
     coord_attrs <- data.frame(id=coord_df$id, population=sample_pop)
-    sp_df <- SpatialPointsDataFrame(cbind(coord_df$x, coord_df$y), coord_attrs, proj4string=proj4str)
+    sp_df <- SpatialPointsDataFrame(cbind(coord_df$X, coord_df$Y), coord_attrs, proj4string=proj4str)
     adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
     network <- graph.adjacency(adj_mat, mode="directed")
     dir_network <- dominator.tree(network, root=1, mode="out")$domtree
+    V(dir_network)$population <- sample_pop
 
     new("NetworkPlan", nodes=sp_df, network=dir_network)
 }
@@ -116,9 +117,9 @@ simple_NetworkPlan <- function() {
 test_that("get adjacency matrix is correct", {
      
     coords_lines <- simple_coords_lines()
-    line_matrix <- coords_lines$line_matrix
-    coord_df <- coords_lines$coord_df
-    adj_mat <- get_adjacency_matrix(line_matrix, coord_df)
+    segment_matrix <- coords_lines$line_matrix
+    segment_node_df<- coords_lines$coord_df
+    adj_mat <- get_adjacency_matrix(segment_matrix, segment_node_df)
     
     # create lookup index into adj matrix corresponding to 
     # expected incidence cells
@@ -133,12 +134,14 @@ test_that("accumulator works", {
     np <- simple_NetworkPlan()
 
     # basic test of default_accumulator
-    np <- accumulate(np, 1, "num_descendents")
-    expect_equal(np@nodes$num_descendents, c(5, 4, 3, 1, 1))
+    np <- accumulate(np, "num_descendents")
+    np_nodes <- get.data.frame(np@network, what="vertices")
+    expect_equal(np_nodes$num_descendents, c(5, 4, 3, 1, 1))
 
     # test summing downstream populations 
     sum_pop <- function(df) { sum(df$population) }
-    np <- accumulate(np, 1, "sum_pop", accumulator=sum_pop)
-    expect_less_than(np@nodes$sum_pop[5], np@nodes$sum_pop[1])
+    np <- accumulate(np, "sum_pop", accumulator=sum_pop)
+    np_nodes <- get.data.frame(np@network, what="vertices")
+    expect_less_than(np_nodes$sum_pop[5], np_nodes$sum_pop[1])
 
 })

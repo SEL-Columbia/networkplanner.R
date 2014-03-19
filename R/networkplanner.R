@@ -74,9 +74,9 @@ read_networkplan = function(directory_name, debug=F) {
 #' This simply selects the node with the smallest vertex id
 #' 
 #' @param node_df SpatialPointsDataFrame to apply selection to
-#' @return subset of the node_df
+#' @return subset of the node_df (MUST BE A DATAFRAME)
 default_selector <- function(node_df) {
-    node_df[min(node_df$id)==node_df$id,]
+    subset(node_df, subset=min(node_df$vid)==node_df$vid)
 }
 
 #' Default accumulator for accumulate method
@@ -101,32 +101,36 @@ default_accumulator <- function(node_df) {
 #' @return A NetworkPlan whose nodes SpatialPointsDataFrame has a sequence 
 #'         column and values
 #' @export
-setGeneric("sequence", function(np, roots, selector=default_selector) standardGeneric("sequence"))
-setMethod("sequence", signature(np="NetworkPlan", roots="numeric"), 
+setGeneric("sequence_plan", function(np, roots, selector=default_selector) standardGeneric("sequence_plan"))
+setMethod("sequence_plan", signature(np="NetworkPlan", roots="numeric"), 
     function(np, roots, selector=default_selector) {
         frontier <- roots
-        nodes <- np@nodes
+        # get.data.frame returns vertices ordered by vertex id
+        nodes <- get.data.frame(np@network, what="vertices")
         # setup node dataframe with vid (vertex id) field
         # for backrefs
-        frontier_df <- nodes[frontier,]
+        nodes$vid <- as.numeric(row.names(nodes))
+        # use subset to guarantee a dataframe is returned
+        frontier_df <- subset(nodes, subset=nodes$vid %in% frontier)
         # keep track of the sequence of the nodes
-        selected <- selector(frontier_df)$id
+        selected <- selector(frontier_df)$vid
         # node_sequence a vector whose position represents the sequence index
         # of the node and the value in the position is the node/vertex id
         node_sequence <- selected
         # frontier <- (frontier - selected) + new_neighbors
         frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
         while(length(frontier)) {
-            frontier_df <- nodes[frontier,]
+
+            frontier_df <- subset(nodes, subset=nodes$vid %in% frontier)
             # keep track of the sequence of the nodes
-            selected <- selector(frontier_df)$id
+            selected <- selector(frontier_df)$vid
             node_sequence <- append(node_sequence, selected)
             # frontier <- (frontier - selected) + new_neighbors
             frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
         }
 
         # now apply the sequence back
-        np@nodes[node_sequence, "sequence"] <- 1:length(np@nodes)
+        V(np@network)[node_sequence]$sequence <- 1:length(V(np@network))
         np
     }
 )
@@ -138,7 +142,6 @@ setMethod("sequence", signature(np="NetworkPlan", roots="numeric"),
 #'
 #' @param np a NetworkPlan
 #'        TODO:  Remove roots once we set them in read method
-#' @param roots the indices of root vertices to accumulate from
 #' @param accumulated_field name of field to set accumulated value
 #' @param accumulator function that summarizes or combines all downstream
 #'        node values into a single value attributed to "this" node
@@ -147,22 +150,36 @@ setMethod("sequence", signature(np="NetworkPlan", roots="numeric"),
 #' @return A NetworkPlan whose nodes SpatialPointsDataFrame has an accumulated_field 
 #'         column and values
 #' @export
-setGeneric("accumulate", function(np, roots, accumulated_field, accumulator=default_accumulator) standardGeneric("accumulate"))
-setMethod("accumulate", signature(np="NetworkPlan", roots="numeric", accumulated_field="character"), 
-    function(np, roots, accumulated_field, accumulator=default_accumulator) {
+setGeneric("accumulate", function(np, accumulated_field, accumulator=default_accumulator) standardGeneric("accumulate"))
+setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character"), 
+    function(np, accumulated_field, accumulator=default_accumulator) {
+
+        # get.data.frame returns vertices ordered by vertex id
+        nodes <- get.data.frame(np@network, what="vertices")
+        nodes$vid <- as.numeric(row.names(nodes))
+ 
         #inner function to "unravel" the dataframe before passing to the accumulator  
         apply_to_down_nodes <- function(df) { 
+            
             down_nodes <- data.frame()
-            if(length(V(np@network)[df$id])) {
-                down_nodes <- np@nodes[subcomponent(np@network, df$id, mode="out"),]
+            if(length(V(np@network)[df$vid])) {
+                down_nodes <- subset(nodes, 
+                                     nodes$vid %in% subcomponent(np@network, df$vid, mode="out"))
             }
             # now call accumulator callback
             accumulator(down_nodes)
         }
-        result <- adply(np@nodes, 1, apply_to_down_nodes)
-        # result should be aligned with np@nodes, so just
-        # bind the 2nd col of result to the new field
-        np@nodes[[accumulated_field]] <- result[,2]
+        result <- daply(nodes, .(vid), apply_to_down_nodes)
+
+        # Now add the new field back to the vertices
+        # result should be aligned with vertices since
+        # nodes dataframe is aligned
+        g <- set.vertex.attribute(np@network, 
+                                  accumulated_field,
+                                  index=1:length(V(np@network)),
+                                  value=result)
+        np@network <- g
+        # return the networkplan
         np
     }
 )
