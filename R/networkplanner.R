@@ -183,3 +183,20 @@ setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character
         np
     }
 )
+
+
+#' Write line shapfile from networkplan object into the given directory
+#'
+#' @param np a NetworkPlan
+#' @param directory_name path to write the downloaded scenario into. By default,
+#'        and if directory_name==NULL, directory_name will be scenario number within
+#'        current working directory
+#' @param nodeFormat a string indicating the type of output file for the nodes in NetworkPlan,
+#' only support 'csv' for now.
+#' @param edgeFormat a string indicating the type of output file for the edges in NetworkPlan,
+#' only support 'shp' for now.
+#' @export
+write.NetworkPlan = function(np, directory_name, 
+                             nodeFormat='csv', edgeFormat='shp') {
+    stop("Not Implemented")
+}
