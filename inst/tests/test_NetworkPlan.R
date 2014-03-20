@@ -67,8 +67,7 @@ test_that("sequence of nodes are consistent with graph topology", {
     # construct NetworkPlan from scratch
     np <- sample_NetworkPlan()
     # strange that a Vertex sequence cannot auto-cast itself to a numeric
-    roots <- as.numeric(V(np@network)[degree(np@network, mode="in")==0])
-    np <- sequence_plan(np, roots)
+    np <- sequence_plan(np)
     e_list <- get.edgelist(np@network)
     from_seq <- np@nodes$sequence[e_list[,1]]
     to_seq <- np@nodes$sequence[e_list[,2]]

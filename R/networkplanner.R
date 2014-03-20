@@ -101,9 +101,11 @@ default_accumulator <- function(node_df) {
 #' @return A NetworkPlan whose nodes SpatialPointsDataFrame has a sequence 
 #'         column and values
 #' @export
-setGeneric("sequence_plan", function(np, roots, selector=default_selector) standardGeneric("sequence_plan"))
-setMethod("sequence_plan", signature(np="NetworkPlan", roots="numeric"), 
-    function(np, roots, selector=default_selector) {
+setGeneric("sequence_plan", function(np, selector=default_selector) standardGeneric("sequence_plan"))
+setMethod("sequence_plan", signature(np="NetworkPlan"), 
+    function(np, selector=default_selector) {
+        # roots have 0 in edges
+        roots <- as.numeric(V(np@network)[degree(np@network, mode="in")==0])
         frontier <- roots
         # get.data.frame returns vertices ordered by vertex id
         nodes <- get.data.frame(np@network, what="vertices")
@@ -200,3 +202,52 @@ write.NetworkPlan = function(np, directory_name,
                              nodeFormat='csv', edgeFormat='shp') {
     stop("Not Implemented")
 }
+#' Default rollout_functions for sequence_plan_far
+default_rollout_functions <- list(sequence_selector=default_selector,
+                                  downstream_accumulator=default_accumulator)
+
+
+#' Perform a "far-sighted" sequencing by combining calls to
+#' accumulate (to accumulate downstream demand for each vertex)
+#' and sequence_plan each getting a custom function to perform
+#' the accumulation/sequencing
+#'
+#' @param np a NetworkPlan
+#' @param accumulated_field name of field to set accumulated value
+#' @param rollout_functions a list with 2 members:  
+#'        sequence_selector function to perform sequencing (see \code{sequence_plan})
+#'        downstream_accumulator function to accumulate downstream values (see \code{accumulate})
+#' @return A NetworkPlan whose network vertices have a sequence value based
+#'         on the rollout_functions.  The edges of the network should also
+#'         have the accumulated_field set to the appropriate value.
+#' @seealso \code{\link{sequence_plan}}
+#' @seealso \code{\link{accumulate}}
+#' @export
+setGeneric("sequence_plan_far", function(np, accumulated_field, rollout_functions=default_rollout_functions) standardGeneric("sequence_plan_far"))
+setMethod("sequence_plan_far", signature(np="NetworkPlan", accumulated_field="character", rollout_functions="list"), 
+    function(np, accumulated_field, rollout_functions=default_rollout_functions) {
+        sequence_selector <- rollout_functions$sequence_selector
+        downstream_accumulator <- rollout_functions$downstream_accumulator
+
+        # accumulate values into accumulated_field
+        np <- accumulate(np, accumulated_field, 
+                         accumulator=downstream_accumulator)
+
+        # apply the accumulated vertex value to upstream edges
+        # only applies to non-root vertices
+        non_roots <- as.numeric(V(np@network)[degree(np@network, mode="in")!=0])
+        upstream_edges <- as.numeric(E(np@network)[to(non_roots)])
+        non_root_values <- get.vertex.attribute(np@network, 
+                                                index=non_roots,
+                                                accumulated_field)
+        g <- set.vertex.attribute(np@network, 
+                                  accumulated_field,
+                                  index=upstream_edges,
+                                  value=non_root_values)
+        np@network <- g
+ 
+        # sequence it via the sequence_selector and return 
+        np <- sequence_plan(np, roots, selector=sequence_selector)
+        np
+    }
+)
