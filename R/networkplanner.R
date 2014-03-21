@@ -50,7 +50,6 @@ read_networkplan = function(directory_name, debug=F) {
     proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
     nodes <- SpatialPointsDataFrame(coords=metrics_df[,c("X","Y")], data=metrics_df,
                                     proj4string=CRS(proj4string))
-    nodes$id <- as.numeric(row.names(nodes)) # note: this is assumed in the matching code later
     
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
@@ -104,14 +103,17 @@ default_accumulator <- function(node_df) {
 setGeneric("sequence_plan", function(np, selector=default_selector) standardGeneric("sequence_plan"))
 setMethod("sequence_plan", signature(np="NetworkPlan"), 
     function(np, selector=default_selector) {
-        # roots have 0 in edges
-        roots <- as.numeric(V(np@network)[degree(np@network, mode="in")==0])
+
+        # start from nodes where is_root==TRUE since we don't want to
+        # sequence "fake" nodes 
+        roots <- as.numeric(V(np@network)[V(np@network)$is_root])
         frontier <- roots
         # get.data.frame returns vertices ordered by vertex id
         nodes <- get.data.frame(np@network, what="vertices")
         # setup node dataframe with vid (vertex id) field
         # for backrefs
-        nodes$vid <- as.numeric(row.names(nodes))
+        nodes$vid <- 1:nrow(nodes)
+
         # use subset to guarantee a dataframe is returned
         frontier_df <- subset(nodes, subset=nodes$vid %in% frontier)
         # keep track of the sequence of the nodes
@@ -120,7 +122,8 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
         # of the node and the value in the position is the node/vertex id
         node_sequence <- selected
         # frontier <- (frontier - selected) + new_neighbors
-        frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
+        new_neighbors <- as.numeric(V(np@network)[ nei(selected, mode="out") ])
+        frontier <- union(setdiff(frontier, selected), new_neighbors)
         while(length(frontier)) {
 
             frontier_df <- subset(nodes, subset=nodes$vid %in% frontier)
@@ -128,11 +131,16 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
             selected <- selector(frontier_df)$vid
             node_sequence <- append(node_sequence, selected)
             # frontier <- (frontier - selected) + new_neighbors
-            frontier <- union(setdiff(frontier, selected), neighbors(np@network, selected))
+
+            new_neighbors <- as.numeric(V(np@network)[ nei(selected, mode="out") ])
+            frontier <- union(setdiff(frontier, selected), new_neighbors)
         }
 
         # now apply the sequence back
-        V(np@network)[node_sequence]$sequence <- 1:length(V(np@network))
+        # only apply to "real" nodes
+        num_real_nodes <- length(V(np@network)[!V(np@network)$is_fake])
+        stopifnot(length(node_sequence)==num_real_nodes)
+        V(np@network)[node_sequence]$sequence <- 1:num_real_nodes
         np
     }
 )
@@ -158,7 +166,11 @@ setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character
 
         # get.data.frame returns vertices ordered by vertex id
         nodes <- get.data.frame(np@network, what="vertices")
-        nodes$vid <- as.numeric(row.names(nodes))
+        nodes$vid <- 1:nrow(nodes)
+
+        # we want to exclude any "fake" nodes (i.e. those nodes that
+        # do not have the same attributes as others) if any
+        nodes <- subset(nodes, !nodes$is_fake) 
  
         #inner function to "unravel" the dataframe before passing to the accumulator  
         apply_to_down_nodes <- function(df) { 
@@ -178,7 +190,7 @@ setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character
         # nodes dataframe is aligned
         g <- set.vertex.attribute(np@network, 
                                   accumulated_field,
-                                  index=1:length(V(np@network)),
+                                  index=nodes$vid,
                                   value=result)
         np@network <- g
         # return the networkplan
@@ -186,8 +198,9 @@ setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character
     }
 )
 #' Default rollout_functions for sequence_plan_far
-default_rollout_functions <- list(sequence_selector=default_selector,
-                                  downstream_accumulator=default_accumulator)
+default_sequence_model <- list(accumulator=default_accumulator, 
+                              accumulated_field="count_downstream",
+                              selector=default_selector)
 
 
 #' Perform a "far-sighted" sequencing by combining calls to
@@ -197,24 +210,25 @@ default_rollout_functions <- list(sequence_selector=default_selector,
 #'
 #' @param np a NetworkPlan
 #' @param accumulated_field name of field to set accumulated value
-#' @param rollout_functions a list with 2 members:  
-#'        sequence_selector function to perform sequencing (see \code{sequence_plan})
-#'        downstream_accumulator function to accumulate downstream values (see \code{accumulate})
+#' @param sequence_model a list with 3 members:  
+#'        accumulator function to accumulate downstream values (see \code{accumulate})
+#'        accumulator_field name of attribute for accumulated value to go in vertices and edges
+#'        selector function to perform sequencing (see \code{sequence_plan})
 #' @return A NetworkPlan whose network vertices have a sequence value based
 #'         on the rollout_functions.  The edges of the network should also
 #'         have the accumulated_field set to the appropriate value.
 #' @seealso \code{\link{sequence_plan}}
 #' @seealso \code{\link{accumulate}}
 #' @export
-setGeneric("sequence_plan_far", function(np, accumulated_field, rollout_functions=default_rollout_functions) standardGeneric("sequence_plan_far"))
-setMethod("sequence_plan_far", signature(np="NetworkPlan", accumulated_field="character", rollout_functions="list"), 
-    function(np, accumulated_field, rollout_functions=default_rollout_functions) {
-        sequence_selector <- rollout_functions$sequence_selector
-        downstream_accumulator <- rollout_functions$downstream_accumulator
+setGeneric("sequence_plan_far", function(np, sequence_model=default_sequence_model) standardGeneric("sequence_plan_far"))
+setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"), 
+    function(np, sequence_model=default_sequence_model) {
+        selector <- sequence_model$selector
+        accumulator <- sequence_model$accumulator
+        accumulated_field <- sequence_model$accumulated_field
 
         # accumulate values into accumulated_field
-        np <- accumulate(np, accumulated_field, 
-                         accumulator=downstream_accumulator)
+        np <- accumulate(np, accumulated_field, accumulator=accumulator)
 
         # apply the accumulated vertex value to upstream edges
         # only applies to non-root vertices
@@ -223,14 +237,14 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan", accumulated_field="ch
         non_root_values <- get.vertex.attribute(np@network, 
                                                 index=non_roots,
                                                 accumulated_field)
-        g <- set.vertex.attribute(np@network, 
-                                  accumulated_field,
-                                  index=upstream_edges,
-                                  value=non_root_values)
+        g <- set.edge.attribute(np@network, 
+                                accumulated_field,
+                                index=upstream_edges,
+                                value=non_root_values)
         np@network <- g
  
         # sequence it via the sequence_selector and return 
-        np <- sequence_plan(np, roots, selector=sequence_selector)
+        np <- sequence_plan(np, selector=selector)
         np
     }
 )
