@@ -230,11 +230,10 @@ write.NetworkPlan = function(np, directory_name,
         csv_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
         write.csv(output_df, csv_dir, row.names=FALSE)    
     }
-    if (edgeFormat='shp'){
+    if (edgeFormat =='shp'){
         spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
         writeLinesShape(output_spldf, spldf_dir)    
-    }
-    
+    }   
     
 }
 #' Default rollout_functions for sequence_plan_far
