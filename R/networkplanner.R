@@ -11,8 +11,7 @@ require(abind)
 setOldClass("igraph")
 
 # The NetworkPlan object
-setClass("NetworkPlan", representation(nodes="SpatialPointsDataFrame", 
-                                       network="igraph"))
+setClass("NetworkPlan", representation(network="igraph"))
 # Handle case with an existing_network as a subclass for now 
 # There's probably a better way to handle it, but without this R complains
 # about the existing_network slot being empty if there's nothing there
@@ -65,7 +64,7 @@ read_networkplan = function(directory_name, debug=F) {
     
    
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
-    new("NetworkPlan", nodes=nodes, network=network)
+    new("NetworkPlan", network=network)
 }
 
 
@@ -209,10 +208,34 @@ setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character
 #' only support 'csv' for now.
 #' @param edgeFormat a string indicating the type of output file for the edges in NetworkPlan,
 #' only support 'shp' for now.
+#' @param includeFake a boolean indicating whether to output the fake node in the 
+#' vertex/node csv file, Default is set to False
 #' @export
 write.NetworkPlan = function(np, directory_name, 
-                             nodeFormat='csv', edgeFormat='shp') {
-    stop("Not Implemented")
+                             nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
+    
+    base_dir = normalizePath(directory_name)
+    
+    # subsetting node_df according to includeFake
+    node_df <- get.data.frame(np@network, what="vertices")
+    if (includeFake == FALSE){
+        output_df <- subset(node_df, !is_fake)
+    }
+    
+    # getting edge SPLDF from NP object
+    output_spldf <- get_edge_spldf(np)
+    
+    # output files based on choice 
+    if (nodeFormat == 'csv'){
+        csv_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
+        write.csv(output_df, csv_dir, row.names=FALSE)    
+    }
+    if (edgeFormat='shp'){
+        spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
+        writeLinesShape(output_spldf, spldf_dir)    
+    }
+    
+    
 }
 #' Default rollout_functions for sequence_plan_far
 default_sequence_model <- list(accumulator=default_accumulator, 
