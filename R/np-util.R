@@ -158,11 +158,6 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # now find the roots of the connected subgraph
     fake_vids <- as.numeric(V(connected)[is.na(V(connected)$nid)])
 
-    # Is it safe to assume all fake vertices have a neighbor?  
-    # I think so (otherwise they won't be in network)
-    root_id <- sapply(neighborhood(connected, order=1, fake_vids, mode="ALL"), function(x){x[2]})
-    V(connected)$is_root <- ifelse(V(connected) %in% root_id,  TRUE, FALSE)
-
     # Now get all subgraphs from fake vertices for connected net
     # make them directed and union them back together
     get_directed_subgraph <- function(vid, graph) {
@@ -183,6 +178,7 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
                                            get_directed_subgraph, 
                                            connected)
 
+
     # Temporary visualization for validation within this function
     # TODO: remove in production code base
     # plot(connected_directed_graph, vertex.size=4, edge.arrow.size=0.1)
@@ -202,7 +198,17 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     #        disjoint runs in seconds rather than minutes for graph.union
     # TODO:  Do we want to keep these separate?  
     connected_directed_graph <- graph.disjoint.union(connected_directed_subgraphs)
+
+    # Designate connected net nodes with is_fake,is_root attributes
+    connected_fake_roots <- as.numeric(V(connected_directed_graph)[degree(connected_directed_graph, mode="in")==0])
+    connected_real_roots <- as.numeric(V(connected_directed_graph)[nei(connected_fake_roots)])
+    V(connected_directed_graph)$is_fake <- ifelse(V(connected_directed_graph) %in% connected_fake_roots,  TRUE, FALSE)
+    V(connected_directed_graph)$is_root <- ifelse(V(connected_directed_graph) %in% connected_real_roots,  TRUE, FALSE)
+
     disconnected_directed_graph <- graph.disjoint.union(disconnected_directed_subgraphs)
+    disconnected_real_roots <- as.numeric(V(disconnected_directed_graph)[degree(disconnected_directed_graph, mode="in")==0])
+    V(disconnected_directed_graph)$is_fake <- FALSE
+    V(disconnected_directed_graph)$is_root <- ifelse(V(disconnected_directed_graph) %in% disconnected_real_roots,  TRUE, FALSE)
 
     # return the combined directed graph
     combined_directed_graph <- graph.disjoint.union(connected_directed_graph, 

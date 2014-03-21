@@ -50,6 +50,10 @@ sample_NetworkPlan <- function() {
     dir_mst_dom <- dominator.tree(undir_mst, root=6, mode="out")
     dir_mst <- dir_mst_dom$domtree
 
+    roots <- as.numeric(V(dir_mst)[degree(dir_mst, mode="in")==0])
+    V(dir_mst)$is_root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
+    V(dir_mst)$is_fake <- FALSE
+
     # There's no existing_network in this plan
     new("NetworkPlan", nodes=sp_df, network=dir_mst)
 }
@@ -109,6 +113,10 @@ simple_NetworkPlan <- function() {
     dir_network <- dominator.tree(network, root=1, mode="out")$domtree
     V(dir_network)$population <- sample_pop
 
+    roots <- as.numeric(V(dir_network)[degree(dir_network, mode="in")==0])
+    V(dir_network)$is_root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
+    V(dir_network)$is_fake <- FALSE
+
     new("NetworkPlan", nodes=sp_df, network=dir_network)
 }
 
@@ -144,3 +152,51 @@ test_that("accumulator works", {
     expect_less_than(np_nodes$sum_pop[5], np_nodes$sum_pop[1])
 
 })
+
+test_that("sequence_plan_far works", {
+
+    np <- simple_NetworkPlan()
+
+    # define simple sequence model
+    sum_pop <- function(df) { sum(df$population) }
+    pop_selector <- function(df) {
+        subset(df, subset = (max(df$sum_d_pop) == df$sum_d_pop))
+    }
+    simple_sequence_model <- list(accumulator=sum_pop,
+                                  accumulated_field="sum_d_pop",
+                                  selector=pop_selector)
+    np <- sequence_plan_far(np, sequence_model=simple_sequence_model)
+
+    # check whether sum_d_pop by sequence matches 
+    # sorted sum_d_pop
+    sum_d_pop_by_seq <- V(np@network)[V(np@network)$sequence]$sum_d_pop
+    sum_d_pop_desc <- sort(V(np@network)$sum_d_pop, decreasing=TRUE)
+    expect_equal(sum(sum_d_pop_by_seq==sum_d_pop_desc), 5)
+})
+
+test_that("reading and sequencing scenario 108 works", {
+    # same as above, but with scenario 108
+    scenario_dir <- str_c(test_data_dir, '108')
+    np <- read_networkplan(scenario_dir)
+
+     # define simple sequence model
+    sum_pop <- function(df) { sum(df$Pop) }
+    pop_selector <- function(df) {
+        subset(df, subset=(max(df$sum_d_pop) == df$sum_d_pop))
+    }
+    simple_sequence_model <- list(accumulator=sum_pop,
+                                  accumulated_field="sum_d_pop",
+                                  selector=pop_selector)
+    np <- sequence_plan_far(np, sequence_model=simple_sequence_model)
+
+    # check whether sum_d_pop by sequence matches 
+    # sorted sum_d_pop
+    vert_df <- get.data.frame(np@network, what="vertices")
+    real_vert_df <- subset(vert_df, subset=!is_fake)
+    sorted_df <- real_vert_df[with(real_vert_df, order(sequence)),]
+    sum_d_pop_by_seq <- sorted_df$sum_d_pop
+    sum_d_pop_desc <- sort(real_vert_df$sum_d_pop, decreasing=TRUE)
+    expect_equal(sum(sum_d_pop_by_seq==sum_d_pop_desc), length(real_verts))
+})
+
+
