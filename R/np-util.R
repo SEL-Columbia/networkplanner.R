@@ -237,8 +237,8 @@ get_edge_spldf <- function(np){
         node2 <- as.numeric(row["v2"])
         edge_id = as.character(row["edge_id"])
         
-        Lines(Line(cbind(c(V(x)$X[node1], V(x)$X[node2]),
-                         c(V(x)$Y[node1], V(x)$Y[node2]))),
+        Lines(Line(cbind(c(V(np@network)$X[node1], V(np@network)$X[node2]),
+                         c(V(np@network)$Y[node1], V(np@network)$Y[node2]))),
               ID=edge_id)
     })
     

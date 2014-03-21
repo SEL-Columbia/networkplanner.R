@@ -4,6 +4,7 @@ require(rgdal)
 require(stringr)
 require(plyr)
 require(abind)
+require(maptools)
 
 #' @include np-utils.R
 
