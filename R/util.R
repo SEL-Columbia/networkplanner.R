@@ -122,8 +122,9 @@ create_graph <- function(metrics_df, segment_matrix) {
     
     #TODO:  do we want directed/undirected here?
     network <- graph.data.frame(edge_df, directed=FALSE, vertex_df)
+    
     #reset names to be consistent with vertex indices
-    V(network)$name <- as.numeric(V(network))
+    network <- remove.vertex.attribute(network, "name")
     network
 }
     

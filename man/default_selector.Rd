@@ -10,7 +10,7 @@ default_selector(node_df)
   to}
 }
 \value{
-subset of the node_df
+subset of the node_df (MUST BE A DATAFRAME)
 }
 \description{
 Default selector for sequence method This simply selects
