@@ -5,6 +5,7 @@ require(stringr)
 require(plyr)
 require(abind)
 require(maptools)
+require(Rcurl)
 
 #' @include np-utils.R
 
@@ -33,7 +34,31 @@ setClass("NetworkPlan", representation(network="igraph"))
 #' @export
 download_scenario = function(scenario_number, directory_name=NULL, userpwd=NULL, 
                              np_url='http://networkplanner.modilabs.org/') {
-    stop("Not Implemented")
+    
+    http://networkplanner.modilabs.org/scenarios/1680.html
+    scenario_number <- "1680"
+    # reconscructing url for the zip file
+    scenario_addr <- paste("scenarios", 
+                           paste(scenario_number, "zip", sep="."), sep="/")
+    full_url <- paste(np_url, scenario_addr, sep="")
+    
+    # sending request and authenticate
+    my_curl <- getCurlHandle(header = TRUE, userpwd = userpwd)
+    my_curl <- getCurlHandle()
+    tmp_zip_file <- getURL(full_url, curl=my_curl)
+    
+    
+    
+    # unzip files 
+    f = CFILE("bfile.zip", mode="wb")
+    curlPerform(url = full_url, writedata = f@ref)
+    close(f)
+    
+    unzip("bfile.zip", exdir = "./bfile")
+    file.remove("bfile.zip")
+    
+    
+    stop("Not yet Implemented")
 }
 
 #' Read network plan from a directory in the filesystem
