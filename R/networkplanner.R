@@ -5,7 +5,7 @@ require(stringr)
 require(plyr)
 require(abind)
 require(maptools)
-require(Rcurl)
+require(RCurl)
 
 #' @include np-utils.R
 
@@ -32,30 +32,38 @@ setClass("NetworkPlan", representation(network="igraph"))
 #' @param np_url URL of the network planner instance to download scenario from. By default,
 #'        it is http://networkplanner.modilabs.org
 #' @export
-download_scenario = function(scenario_number, directory_name=NULL, userpwd=NULL, 
+download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
-    
-    http://networkplanner.modilabs.org/scenarios/1680.html
-    scenario_number <- "1680"
+    username = "zmyao88"
+    password = "35506701"
     # reconscructing url for the zip file
     scenario_addr <- paste("scenarios", 
                            paste(scenario_number, "zip", sep="."), sep="/")
     full_url <- paste(np_url, scenario_addr, sep="")
     
-    # sending request and authenticate
-    my_curl <- getCurlHandle(header = TRUE, userpwd = userpwd)
+    # Create Curl handle with cookie jar
     my_curl <- getCurlHandle()
-    tmp_zip_file <- getURL(full_url, curl=my_curl)
+    my_curl <- curlSetOpt(cookiejar="cookies.txt",
+                          useragent = "Mozilla/5.0",
+                          followlocation = TRUE,
+                          curl=my_curl)
     
     
+    # login network planner and save session into cookie.jar
+    LOGINURL = "http://networkplanner.modilabs.org/people/login_"
+    pars=list(
+        username=username,
+        password=password)
+    postForm(LOGINURL, .params = pars, curl=my_curl)
     
-    # unzip files 
-    f = CFILE("bfile.zip", mode="wb")
-    curlPerform(url = full_url, writedata = f@ref)
+
+    # Download temp zip files to local
+    f = CFILE("tmp.zip", mode="wb")
+    curlPerform(url = full_url, writedata = f@ref, curl=my_curl)
     close(f)
     
-    unzip("bfile.zip", exdir = "./bfile")
-    file.remove("bfile.zip")
+    unzip("tmp.zip", exdir = "./tmp")
+    file.remove("tmp.zip")
     
     
     stop("Not yet Implemented")
