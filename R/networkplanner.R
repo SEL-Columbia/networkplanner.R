@@ -246,7 +246,7 @@ write.NetworkPlan = function(np, directory_name,
         write.csv(output_df, csv_dir, row.names=FALSE)    
     }
     if (edgeFormat =='shp'){
-        spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
+        spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence")
         writeLinesShape(output_spldf, spldf_dir)    
     }   
     

@@ -6,8 +6,7 @@ This simply selects the node with the smallest vertex id}
 default_selector(node_df)
 }
 \arguments{
-  \item{node_df}{SpatialPointsDataFrame to apply selection
-  to}
+  \item{node_df}{node dataframe to apply selection to}
 }
 \value{
 subset of the node_df (MUST BE A DATAFRAME)

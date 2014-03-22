@@ -304,12 +304,11 @@ get_edge_spldf <- function(np){
     # We can ssume that the order is preserved
     line_df <- SpatialLinesDataFrame(SpatialLines(splines), 
                                      data=data.frame(edge_id=edges[,"edge_id"]))
-    line_df <- merge(line_df, edge_df, by="edge_id")
-    
-    ## A little bit confused about what attributes need to be attached to the SPLDF
-    ## Someone can clarify this???
+    # merge didn't want to return a SpatialLinesDataFrame without the sp namespace prefix
+    line_df <- sp::merge(line_df, edge_df, by="edge_id")
     return(line_df)
-}
+}    
+
 
 # Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),
