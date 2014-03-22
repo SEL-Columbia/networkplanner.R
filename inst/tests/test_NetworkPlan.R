@@ -148,7 +148,7 @@ test_that("accumulator works", {
     expect_equal(np_nodes$num_descendents, c(5, 4, 3, 1, 1))
 
     # test summing downstream populations 
-    sum_pop <- function(node_df, edge_df) { data.frame(sum_pop=sum(node_df$population)) }
+    sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$population)) }
     np <- accumulate(np, accumulator=sum_pop)
     np_nodes <- get.data.frame(np@network, what="vertices")
     expect_less_than(np_nodes$sum_pop[5], np_nodes$sum_pop[1])
@@ -160,7 +160,7 @@ test_that("sequence_plan_far works", {
     np <- simple_NetworkPlan()
 
     # define simple sequence model
-    sum_pop <- function(node_df, edge_df) { data.frame(sum_pop=sum(node_df$population)) }
+    sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$population)) }
     pop_selector <- function(df) {
         subset(df, subset = (max(df$sum_pop) == df$sum_pop))
     }
@@ -181,7 +181,7 @@ test_that("reading and sequencing scenario 108 works", {
     np <- read_networkplan(scenario_dir)
 
      # define simple sequence model
-    sum_pop <- function(node_df, edge_df) { data.frame(sum_pop=sum(node_df$Pop)) }
+    sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$Pop)) }
     pop_selector <- function(df) {
         subset(df, subset=(max(df$sum_pop) == df$sum_pop))
     }

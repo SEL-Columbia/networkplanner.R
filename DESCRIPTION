@@ -16,7 +16,8 @@ Depends:
     lubridate,
     sp,
     rgdal,
-    abind
+    abind,
+    geosphere
 License: TBD
 URL: http://www.SEL-Columbia.github.com/networkplanner.R
 Collate:

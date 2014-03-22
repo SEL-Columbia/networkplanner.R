@@ -64,6 +64,9 @@ read_networkplan = function(directory_name, debug=F) {
     # TODO:  Needs testing
     network <- create_directed_trees(network)
     
+    # Now assign distances (might be faster to do it within create_graph, but
+    # they get lost within the dominator.tree calls in create_directed_trees)
+    network <- assign_distances(network, proj4string)
    
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
     new("NetworkPlan", nodes=nodes, network=network)
@@ -84,8 +87,10 @@ default_selector <- function(node_df) {
 #' 
 #' @param node_df downstream node dataframe
 #' @param edge_df downstream edge dataframe
+#' @param g the graph
+#' @param vid of the current vertex in the graph
 #' @return subset of the node_df
-default_accumulator <- function(node_df, edge_df) {
+default_accumulator <- function(node_df, edge_df, g, vid) {
     data.frame(num_descendents=nrow(node_df))
 }
 
@@ -179,7 +184,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
                                  vid %in% down_verts)
             down_edges <- subset(edges, from %in% down_verts)
             # now call accumulator callback
-            accumulator(down_nodes, down_edges)
+            accumulator(down_nodes, down_edges, np@network, df$vid)
         }
         # get new dataframe of accumulator results 
         result_nodes <- ddply(real_nodes, .(vid), apply_to_down_nodes)
