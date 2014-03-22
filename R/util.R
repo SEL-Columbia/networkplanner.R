@@ -274,6 +274,43 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
   
 }
 
+# create SPLDF from far sighted sequenced graph with "fake" nodes preserved
+get_edge_spldf <- function(np){
+    
+    # get edge list of vertex representation
+    edges <- get.edgelist(np@network)
+    edges <- cbind(edge_id=1:nrow(edges), 
+                   v1=edges[,1], 
+                   v2=edges[,2])
+    
+    # getting all the edge attributes and assign edge_id based on the sequence
+    edge_df <- data.frame(edge.attributes(np@network))
+    edge_df$edge_id <- 1:nrow(edge_df)
+    
+    # creating SpatialLines object from edges matrix 
+    splines <- apply(edges, 1, function(row) {
+        
+        node1 <- as.numeric(row["v1"])
+        node2 <- as.numeric(row["v2"])
+        edge_id = as.character(row["edge_id"])
+        
+        Lines(Line(cbind(c(V(np@network)$X[node1], V(np@network)$X[node2]),
+                         c(V(np@network)$Y[node1], V(np@network)$Y[node2]))),
+              ID=edge_id)
+    })
+    
+    # creating SpatialLineDataFrame from SpatialLine
+    # Because the SpLines are created by the order of each row of edge matrix
+    # We can ssume that the order is preserved
+    line_df <- SpatialLinesDataFrame(SpatialLines(splines), 
+                                     data=data.frame(edge_id=edges[,"edge_id"]))
+    line_df <- merge(line_df, edge_df, by="edge_id")
+    
+    ## A little bit confused about what attributes need to be attached to the SPLDF
+    ## Someone can clarify this???
+    return(line_df)
+}
+
 # Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),
 #                              adj2 = get_adjacency_matrix(line_matrix=get_coord_matrix(network_shp), coord_df=get_coord_dataframe(network_shp)),

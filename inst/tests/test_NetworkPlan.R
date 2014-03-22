@@ -55,7 +55,7 @@ sample_NetworkPlan <- function() {
     V(dir_mst)$is_fake <- FALSE
 
     # There's no existing_network in this plan
-    new("NetworkPlan", nodes=sp_df, network=dir_mst)
+    list(nodes=sp_df, np=new("NetworkPlan", network=dir_mst))
 }
      
     
@@ -69,12 +69,14 @@ test_that("reading network plan 174 creates a basically valid NetworkPlan", {
 test_that("sequence of nodes are consistent with graph topology", {
     # net_plan <- read_networkplan(test_scenario_dir)
     # construct NetworkPlan from scratch
-    np <- sample_NetworkPlan()
+    np_nodes <- sample_NetworkPlan()
+    np <- np_nodes$np
+    nodes <- np_nodes$nodes
     # strange that a Vertex sequence cannot auto-cast itself to a numeric
     np <- sequence_plan(np)
     e_list <- get.edgelist(np@network)
-    from_seq <- np@nodes$sequence[e_list[,1]]
-    to_seq <- np@nodes$sequence[e_list[,2]]
+    from_seq <- nodes$sequence[e_list[,1]]
+    to_seq <- nodes$sequence[e_list[,2]]
 
     # ensure that all "from" nodes are sequenced before "to" nodes
     expect_equal(length(which(from_seq < to_seq)), length(from_seq))
@@ -119,7 +121,7 @@ simple_NetworkPlan <- function() {
     V(dir_network)$is_root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
     V(dir_network)$is_fake <- FALSE
 
-    new("NetworkPlan", nodes=sp_df, network=dir_network)
+    new("NetworkPlan", network=dir_network)
 }
 
 
