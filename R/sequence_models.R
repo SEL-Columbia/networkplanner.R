@@ -33,13 +33,22 @@ mv_v_dmd_get_dist_to_parent <- function(g, vid) {
 #' @export
 mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) { 
     distance <- mv_v_dmd_get_dist_to_parent(g, vid)
-    sum_distance <- sum(edge_df$distance) + distance
-    sum_dmd_yr <- sum(node_df$Demand...Projected.nodal.demand.per.year)
+    dmd_yr <- V(g)[vid]$Demand...Projected.nodal.demand.per.year
+    all_distances <- c(distance, edge_df$distance)
+    sum_distance <- sum(all_distances)
+    all_demand <- node_df$Demand...Projected.nodal.demand.per.year
+    sum_dmd_yr <- sum(all_demand)
     sum_mv_v_dmd <- -1
-    if(sum_dmd_yr != 0) {
+    if(all(sum_dmd_yr != 0)) {
         sum_mv_v_dmd <- sum_distance/sum_dmd_yr
     }
-    data.frame(sum_distance=sum_distance, 
+    mv_v_dmd <- -1
+    if(dmd_yr != 0) {
+        mv_v_dmd <- distance/dmd_yr
+    } 
+    data.frame(distance=distance,
+               mv_v_dmd=mv_v_dmd,
+               sum_distance=sum_distance, 
                sum_dmd_yr=sum_dmd_yr,
                sum_mv_v_dmd=sum_mv_v_dmd) 
 }

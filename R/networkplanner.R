@@ -62,9 +62,14 @@ read_networkplan = function(directory_name, debug=F) {
     # Now create directed graph from "fake" nodes (for trees connected
     # to the existing network) and "roots" (for trees that are NOT connected)
     # TODO:  Needs testing
-    network <- create_directed_trees(network)
+    # root selector selects 
+    subnet_root_selector <- function(g) {
+        demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
+        root_vid <- which(demands==max(demands))[1]
+    }
+    network <- create_directed_trees(network, root_selector=subnet_root_selector)
     
-    # Now assign distances (might be faster to do it within create_graph, but
+    # Now assign distances to edges (might be faster to do it within create_graph, but
     # they get lost within the dominator.tree calls in create_directed_trees)
     network <- assign_distances(network, proj4string)
    
