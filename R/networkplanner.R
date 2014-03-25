@@ -36,6 +36,11 @@ setClass("NetworkPlan", representation(network="igraph"))
 download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
     
+    ## TODO: Figure out how to handle case that user didnt give login info 
+    ## but the SCENARIO happens to be PRIVATE, can't think of a way to validate
+    ## until the zip file is downloaded.
+
+    
     # In condition that user didn't give directory_name
     # Use working dirercory of R seesion and Scenario number
     # as the folder to save data 
