@@ -16,9 +16,11 @@ Depends:
     lubridate,
     sp,
     rgdal,
-    abind
+    abind,
+    geosphere
 License: TBD
 URL: http://www.SEL-Columbia.github.com/networkplanner.R
 Collate:
+    'util.R'
+    'sequence_models.R'
     'networkplanner.R'
-    'np-util.R'

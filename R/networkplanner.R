@@ -7,7 +7,8 @@ require(abind)
 require(maptools)
 require(RCurl)
 
-#' @include np-utils.R
+#' @include util.R
+#' @include sequence_models.R 
 
 # Workaround for using igraph in an s4 object slot
 setOldClass("igraph")
@@ -94,8 +95,16 @@ read_networkplan = function(directory_name, debug=F) {
     # Now create directed graph from "fake" nodes (for trees connected
     # to the existing network) and "roots" (for trees that are NOT connected)
     # TODO:  Needs testing
-    network <- create_directed_trees(network)
+    # root selector selects 
+    subnet_root_selector <- function(g) {
+        demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
+        root_vid <- which(demands==max(demands))[1]
+    }
+    network <- create_directed_trees(network, root_selector=subnet_root_selector)
     
+    # Now assign distances to edges (might be faster to do it within create_graph, but
+    # they get lost within the dominator.tree calls in create_directed_trees)
+    network <- assign_distances(network, proj4string)
    
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
     new("NetworkPlan", network=network)
@@ -105,7 +114,7 @@ read_networkplan = function(directory_name, debug=F) {
 #' Default selector for sequence method
 #' This simply selects the node with the smallest vertex id
 #' 
-#' @param node_df SpatialPointsDataFrame to apply selection to
+#' @param node_df node dataframe to apply selection to
 #' @return subset of the node_df (MUST BE A DATAFRAME)
 default_selector <- function(node_df) {
     subset(node_df, subset=min(node_df$vid)==node_df$vid)
@@ -114,10 +123,13 @@ default_selector <- function(node_df) {
 #' Default accumulator for accumulate method
 #' This calculates the count of all downstream nodes
 #' 
-#' @param node_df SpatialPointsDataFrame to accumulate values from
+#' @param node_df downstream node dataframe
+#' @param edge_df downstream edge dataframe
+#' @param g the graph
+#' @param vid of the current vertex in the graph
 #' @return subset of the node_df
-default_accumulator <- function(node_df) {
-    nrow(node_df)
+default_accumulator <- function(node_df, edge_df, g, vid) {
+    data.frame(num_descendents=nrow(node_df))
 }
 
 #' Sequence a NetworkPlan via breadth-first search from roots
@@ -180,57 +192,64 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
 
 #' Accumulate "downstream" nodal values into a summary value
 #' for "this" node. 
-#' NOTE:  NetworkPlan should be directed from the roots prior
-#'        to running. 
 #'
 #' @param np a NetworkPlan
-#'        TODO:  Remove roots once we set them in read method
-#' @param accumulated_field name of field to set accumulated value
 #' @param accumulator function that summarizes or combines all downstream
-#'        node values into a single value attributed to "this" node
-#'        (defined by the 'accumulated_field' name)
-#'        takes a SpatialPointsDataFrame
-#' @return A NetworkPlan whose nodes SpatialPointsDataFrame has an accumulated_field 
-#'         column and values
+#'        node values into a new row dataframe attributed to "this" node
+#'        the accumulator take
+#' @return A NetworkPlan whose network vertices and their associated upstream
+#'         edges have new attributes/values as defined by accumulator
 #' @export
-setGeneric("accumulate", function(np, accumulated_field, accumulator=default_accumulator) standardGeneric("accumulate"))
-setMethod("accumulate", signature(np="NetworkPlan", accumulated_field="character"), 
-    function(np, accumulated_field, accumulator=default_accumulator) {
+setGeneric("accumulate", function(np, accumulator=default_accumulator) standardGeneric("accumulate"))
+setMethod("accumulate", signature(np="NetworkPlan"), 
+    function(np, accumulator=default_accumulator) {
 
         # get.data.frame returns vertices ordered by vertex id
-        nodes <- get.data.frame(np@network, what="vertices")
+        nodes_edges <- get.data.frame(np@network, what="both")
+        nodes <- nodes_edges$vertices
+        edges <- nodes_edges$edges
         nodes$vid <- 1:nrow(nodes)
 
         # we want to exclude any "fake" nodes (i.e. those nodes that
         # do not have the same attributes as others) if any
-        nodes <- subset(nodes, !nodes$is_fake) 
+        real_nodes <- subset(nodes, !nodes$is_fake) 
  
         #inner function to "unravel" the dataframe before passing to the accumulator  
         apply_to_down_nodes <- function(df) { 
             
-            down_nodes <- data.frame()
-            if(length(V(np@network)[df$vid])) {
-                down_nodes <- subset(nodes, 
-                                     nodes$vid %in% subcomponent(np@network, df$vid, mode="out"))
-            }
+            down_verts <- subcomponent(np@network, df$vid, mode="out")
+            down_nodes <- subset(real_nodes, 
+                                 vid %in% down_verts)
+            down_edges <- subset(edges, from %in% down_verts)
             # now call accumulator callback
-            accumulator(down_nodes)
+            accumulator(down_nodes, down_edges, np@network, df$vid)
         }
-        result <- daply(nodes, .(vid), apply_to_down_nodes)
+        # get new dataframe of accumulator results 
+        result_nodes <- ddply(real_nodes, .(vid), apply_to_down_nodes)
 
-        # Now add the new field back to the vertices
-        # result should be aligned with vertices since
-        # nodes dataframe is aligned
-        g <- set.vertex.attribute(np@network, 
-                                  accumulated_field,
-                                  index=nodes$vid,
-                                  value=result)
+        # join back to nodes
+        new_nodes <- merge(nodes, result_nodes, by.x="vid", by.y="vid", all.x=TRUE)
+
+        # join to upstream edges
+        new_edges <- merge(edges, result_nodes, by.x="to", by.y="vid", all.x=TRUE)
+
+        # reorder the vertex names (graph.data.frame needs vertex id in 1st col)
+        vertex_names <- c(c("vid"), setdiff(names(new_nodes), c("vid")))
+        new_vertices <- new_nodes[,vertex_names]
+
+        # reorder the edge names (graph.data.frame needs from, to in 1st 2 cols)
+        edge_names <- c(c("from", "to"), setdiff(names(new_edges), c("from", "to")))
+        new_edges <- new_edges[,edge_names]
+
+        g <- graph.data.frame(new_edges, directed=TRUE, new_vertices)
+        # get rid of the name attribute as this leads to confusion
+        g <- remove.vertex.attribute(g, "name")
+
         np@network <- g
         # return the networkplan
         np
     }
 )
-
 
 #' Write line shapfile from networkplan object into the given directory
 #'
@@ -265,15 +284,15 @@ write.NetworkPlan = function(np, directory_name,
         write.csv(output_df, csv_dir, row.names=FALSE)    
     }
     if (edgeFormat =='shp'){
-        spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
+        spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence")
         writeLinesShape(output_spldf, spldf_dir)    
     }   
     
 }
+
 #' Default rollout_functions for sequence_plan_far
 default_sequence_model <- list(accumulator=default_accumulator, 
-                              accumulated_field="count_downstream",
-                              selector=default_selector)
+                               selector=default_selector)
 
 
 #' Perform a "far-sighted" sequencing by combining calls to
@@ -296,25 +315,12 @@ default_sequence_model <- list(accumulator=default_accumulator,
 setGeneric("sequence_plan_far", function(np, sequence_model=default_sequence_model) standardGeneric("sequence_plan_far"))
 setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"), 
     function(np, sequence_model=default_sequence_model) {
+
         selector <- sequence_model$selector
         accumulator <- sequence_model$accumulator
-        accumulated_field <- sequence_model$accumulated_field
 
         # accumulate values into accumulated_field
-        np <- accumulate(np, accumulated_field, accumulator=accumulator)
-
-        # apply the accumulated vertex value to upstream edges
-        # only applies to non-root vertices
-        non_roots <- as.numeric(V(np@network)[degree(np@network, mode="in")!=0])
-        upstream_edges <- as.numeric(E(np@network)[to(non_roots)])
-        non_root_values <- get.vertex.attribute(np@network, 
-                                                index=non_roots,
-                                                accumulated_field)
-        g <- set.edge.attribute(np@network, 
-                                accumulated_field,
-                                index=upstream_edges,
-                                value=non_root_values)
-        np@network <- g
+        np <- accumulate(np, accumulator=accumulator)
  
         # sequence it via the sequence_selector and return 
         np <- sequence_plan(np, selector=selector)

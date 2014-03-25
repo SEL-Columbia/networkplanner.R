@@ -55,7 +55,7 @@ sample_NetworkPlan <- function() {
     V(dir_mst)$is_fake <- FALSE
 
     # There's no existing_network in this plan
-    new("NetworkPlan", nodes=sp_df, network=dir_mst)
+    list(nodes=sp_df, np=new("NetworkPlan", network=dir_mst))
 }
      
     
@@ -69,12 +69,14 @@ test_that("reading network plan 174 creates a basically valid NetworkPlan", {
 test_that("sequence of nodes are consistent with graph topology", {
     # net_plan <- read_networkplan(test_scenario_dir)
     # construct NetworkPlan from scratch
-    np <- sample_NetworkPlan()
+    np_nodes <- sample_NetworkPlan()
+    np <- np_nodes$np
+    nodes <- np_nodes$nodes
     # strange that a Vertex sequence cannot auto-cast itself to a numeric
     np <- sequence_plan(np)
     e_list <- get.edgelist(np@network)
-    from_seq <- np@nodes$sequence[e_list[,1]]
-    to_seq <- np@nodes$sequence[e_list[,2]]
+    from_seq <- nodes$sequence[e_list[,1]]
+    to_seq <- nodes$sequence[e_list[,2]]
 
     # ensure that all "from" nodes are sequenced before "to" nodes
     expect_equal(length(which(from_seq < to_seq)), length(from_seq))
@@ -112,12 +114,14 @@ simple_NetworkPlan <- function() {
     network <- graph.adjacency(adj_mat, mode="directed")
     dir_network <- dominator.tree(network, root=1, mode="out")$domtree
     V(dir_network)$population <- sample_pop
+    V(dir_network)$X <- coord_df$X
+    V(dir_network)$Y <- coord_df$Y
 
     roots <- as.numeric(V(dir_network)[degree(dir_network, mode="in")==0])
     V(dir_network)$is_root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
     V(dir_network)$is_fake <- FALSE
 
-    new("NetworkPlan", nodes=sp_df, network=dir_network)
+    new("NetworkPlan", network=dir_network)
 }
 
 
@@ -141,13 +145,13 @@ test_that("accumulator works", {
     np <- simple_NetworkPlan()
 
     # basic test of default_accumulator
-    np <- accumulate(np, "num_descendents")
+    np <- accumulate(np)
     np_nodes <- get.data.frame(np@network, what="vertices")
     expect_equal(np_nodes$num_descendents, c(5, 4, 3, 1, 1))
 
     # test summing downstream populations 
-    sum_pop <- function(df) { sum(df$population) }
-    np <- accumulate(np, "sum_pop", accumulator=sum_pop)
+    sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$population)) }
+    np <- accumulate(np, accumulator=sum_pop)
     np_nodes <- get.data.frame(np@network, what="vertices")
     expect_less_than(np_nodes$sum_pop[5], np_nodes$sum_pop[1])
 
@@ -158,20 +162,19 @@ test_that("sequence_plan_far works", {
     np <- simple_NetworkPlan()
 
     # define simple sequence model
-    sum_pop <- function(df) { sum(df$population) }
+    sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$population)) }
     pop_selector <- function(df) {
-        subset(df, subset = (max(df$sum_d_pop) == df$sum_d_pop))
+        subset(df, subset = (max(df$sum_pop) == df$sum_pop))
     }
     simple_sequence_model <- list(accumulator=sum_pop,
-                                  accumulated_field="sum_d_pop",
                                   selector=pop_selector)
     np <- sequence_plan_far(np, sequence_model=simple_sequence_model)
 
     # check whether sum_d_pop by sequence matches 
     # sorted sum_d_pop
-    sum_d_pop_by_seq <- V(np@network)[V(np@network)$sequence]$sum_d_pop
-    sum_d_pop_desc <- sort(V(np@network)$sum_d_pop, decreasing=TRUE)
-    expect_equal(sum(sum_d_pop_by_seq==sum_d_pop_desc), 5)
+    sum_pop_by_seq <- V(np@network)[V(np@network)$sequence]$sum_pop
+    sum_pop_desc <- sort(V(np@network)$sum_pop, decreasing=TRUE)
+    expect_equal(sum(sum_pop_by_seq==sum_pop_desc), 5)
 })
 
 test_that("reading and sequencing scenario 108 works", {
@@ -180,12 +183,11 @@ test_that("reading and sequencing scenario 108 works", {
     np <- read_networkplan(scenario_dir)
 
      # define simple sequence model
-    sum_pop <- function(df) { sum(df$Pop) }
+    sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$Pop)) }
     pop_selector <- function(df) {
-        subset(df, subset=(max(df$sum_d_pop) == df$sum_d_pop))
+        subset(df, subset=(max(df$sum_pop) == df$sum_pop))
     }
     simple_sequence_model <- list(accumulator=sum_pop,
-                                  accumulated_field="sum_d_pop",
                                   selector=pop_selector)
     np <- sequence_plan_far(np, sequence_model=simple_sequence_model)
 
@@ -194,9 +196,9 @@ test_that("reading and sequencing scenario 108 works", {
     vert_df <- get.data.frame(np@network, what="vertices")
     real_vert_df <- subset(vert_df, subset=!is_fake)
     sorted_df <- real_vert_df[with(real_vert_df, order(sequence)),]
-    sum_d_pop_by_seq <- sorted_df$sum_d_pop
-    sum_d_pop_desc <- sort(real_vert_df$sum_d_pop, decreasing=TRUE)
-    expect_equal(sum(sum_d_pop_by_seq==sum_d_pop_desc), length(real_verts))
+    sum_pop_by_seq <- sorted_df$sum_pop
+    sum_pop_desc <- sort(real_vert_df$sum_pop, decreasing=TRUE)
+    expect_equal(sum(sum_pop_by_seq==sum_pop_desc), nrow(real_vert_df))
 })
 
 

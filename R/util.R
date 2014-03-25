@@ -1,3 +1,24 @@
+## dist_fun -- we take in 2 vectors (1 & 2) of vertices on a network
+## the distance from vertices 1 to the respective vertices 2 is calculated and returned as a single vector 
+dist_fun <- function(points_1, points_2, projection_type="")
+{
+  #TODO:  more rigorous check on projections (i don't know if 'utm' is sufficient)
+  if(grepl("utm", projection_type))
+  {
+    points_1 <- as.matrix(points_1)
+    if (dim(points_1)[1] != dim(points_2)[1])
+    {
+      points_1 <- matrix(rep(points_1,dim(points_2)[1]),ncol=2,byrow=T)      
+    }
+    points_2 <- as.matrix(points_2)
+    dist <- sqrt(rowSums((points_1 - points_2)^2))  
+  }else{
+    dist <- distCosine(points_1,points_2,r=6371010) 
+    #r=6371010  --> radius of Earth Network Planner uses  
+  } 
+  return(dist)
+}
+
 # assign id, x, y to all points in SpatialLinesDataFrame
 get_coord_dataframe <- function(sldf) {
     coord_list <- llply(sldf@lines, function(l) { l@Lines[[1]]@coords })
@@ -9,30 +30,65 @@ get_coord_dataframe <- function(sldf) {
     
 # get adjacency matrix rep of sldf referencing coord_df ids
 # TODO:  Not sure why I get some cycles with this method
-get_adjacency_matrix <- function(segment_matrix, segment_node_df) {
+get_adjacency_matrix <- function(segment_matrix, segment_node_df, weighted=FALSE, proj4string="") {
     p1 <- as.data.frame(segment_matrix[1:nrow(segment_matrix),1,1:2])
+    names(p1) <- c("X", "Y")
     p2 <- as.data.frame(segment_matrix[1:nrow(segment_matrix),2,1:2])
+    names(p2) <- c("X", "Y")
     # need the ids to ensure order after the merge
     p1$pid <- as.numeric(row.names(p1))
     p2$pid <- as.numeric(row.names(p2))
-    p1_coord_merge <- merge(p1, segment_node_df, by.x=c(1,2), by.y=c("X","Y"))[,c("pid", "id")]
-    p2_coord_merge <- merge(p2, segment_node_df, by.x=c(1,2), by.y=c("X","Y"))[,c("pid", "id")]
+    p1_coord_merge <- merge(p1, segment_node_df, by.x=c("X","Y"), by.y=c("X","Y"))
+    p2_coord_merge <- merge(p2, segment_node_df, by.x=c("X","Y"), by.y=c("X","Y"))
+    
+    # now re-order according to pids
+    p1_df <- p1_coord_merge[with(p1_coord_merge, order(pid)),] 
+    p2_df <- p2_coord_merge[with(p2_coord_merge, order(pid)),] 
+ 
+    # p1_coord_merge <- merge(p1, segment_node_df, by.x=c(1,2), by.y=c("X","Y"))[,c("pid", "id", "X", "Y")]
+    # p2_coord_merge <- merge(p2, segment_node_df, by.x=c(1,2), by.y=c("X","Y"))[,c("pid", "id", "X", "Y")]
     # now get the node ids in the correct order
-    p1_ids <- p1_coord_merge[with(p1_coord_merge, order(pid)),"id"] 
-    p2_ids <- p2_coord_merge[with(p2_coord_merge, order(pid)),"id"] 
+    p1_ids <- p1_df$id
+    p2_ids <- p2_df$id
     adj_matrix <- matrix(nrow=nrow(segment_node_df), ncol=nrow(segment_node_df), data=0)
     
-    # must be a better way to set the adjacency matrix incidence cells
-    # but for now, use index_matrices (both from/to and to/from)
-    
+    # use index_matrices (both from/to and to/from)
     index_array1 <- cbind(p1_ids, p2_ids)   
     index_array2 <- cbind(p2_ids, p1_ids)
-
-    adj_matrix[index_array1] <- 1
-    adj_matrix[index_array2] <- 1
+    
+    if(weighted) {
+        p1_p2_dists <- dist_fun(p1_df[,c("X", "Y")], p2_df[,c("X","Y")], proj4string) 
+        p2_p1_dists <- dist_fun(p2_df[,c("X", "Y")], p1_df[,c("X","Y")], proj4string) 
+        adj_matrix[index_array1] <- p1_p2_dists 
+        adj_matrix[index_array2] <- p2_p1_dists
+    }
+    else {
+        adj_matrix[index_array1] <- 1
+        adj_matrix[index_array2] <- 1
+    }
     adj_matrix
 }
 
+assign_distances <- function(network, proj4string="") {
+
+    nodes_edges <- get.data.frame(network, what="both")
+    nodes <- nodes_edges$vertices
+    edges <- nodes_edges$edges
+    nodes$vid <- 1:nrow(nodes)
+    nodes_xyv <- nodes[,c("X", "Y", "vid")]
+    new_edges <- merge(edges, nodes_xyv, by.x="from", by.y="vid", all.x=TRUE)
+    new_edges <- merge(new_edges, nodes_xyv, by.x="to", by.y="vid", all.x=TRUE)
+    new_edges$distance <- dist_fun(new_edges[,c("X.x","Y.x")], new_edges[,c("X.y","Y.y")], proj4string)
+
+    new_edges <- new_edges[,c("from", "to", "distance")]
+    vertex_names <- c(c("vid"), setdiff(names(nodes), c("vid")))
+    nodes <- nodes[,vertex_names]
+
+    g <- graph.data.frame(new_edges, directed=TRUE, nodes)
+    # get rid of the name attribute as this leads to confusion
+    g <- remove.vertex.attribute(g, "name")
+    g
+}
 
 # Get the co-ordinate matrix out of a SpatialLinesDataFrame (as a three dimensional array)
 # Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
@@ -82,7 +138,7 @@ test_edge_pairs <- function(segment_node_df, p1, p2, network) {
 }
    
 # create graph from node_dataframe (NOT sp) and segment_matrix
-create_graph <- function(metrics_df, segment_matrix) {
+create_graph <- function(metrics_df, segment_matrix, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
     
     p1 <- segment_matrix[1:dim(segment_matrix)[1],1,1:2]
     p2 <- segment_matrix[1:dim(segment_matrix)[1],2,1:2]
@@ -122,8 +178,9 @@ create_graph <- function(metrics_df, segment_matrix) {
     
     #TODO:  do we want directed/undirected here?
     network <- graph.data.frame(edge_df, directed=FALSE, vertex_df)
+    
     #reset names to be consistent with vertex indices
-    V(network)$name <- as.numeric(V(network))
+    network <- remove.vertex.attribute(network, "name")
     network
 }
     
@@ -164,9 +221,9 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
         subgraph_vids <- subcomponent(graph, vid, mode="ALL")
         directed <- as.directed(graph, mode="mutual")
         result <- dominator.tree(directed, vid, mode="out")
+
         dom_tree <- result$domtree
-        # I made this quick hack to make it work here
-        # TODO: Figure out some solid way to generate directed_subgraph
+
         directed_subgraph <- induced.subgraph(dom_tree, 
                                               which(!is.na(result$dom)))
         # We should write a test to make sure that 
@@ -187,6 +244,7 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # Assumes decompose retains vertex ids
     disconnected_subgraphs <- decompose.graph(disconnected)
     disconnected_roots <- sapply(disconnected_subgraphs, root_selector) 
+    print(disconnected_roots)
     disconnected_directed_subgraphs <- lapply(disconnected_roots, 
                                               get_directed_subgraph, 
                                               disconnected)
@@ -247,12 +305,11 @@ get_edge_spldf <- function(np){
     # We can ssume that the order is preserved
     line_df <- SpatialLinesDataFrame(SpatialLines(splines), 
                                      data=data.frame(edge_id=edges[,"edge_id"]))
-    line_df <- merge(line_df, edge_df, by="edge_id")
-    
-    ## A little bit confused about what attributes need to be attached to the SPLDF
-    ## Someone can clarify this???
+    # merge didn't want to return a SpatialLinesDataFrame without the sp namespace prefix
+    line_df <- sp::merge(line_df, edge_df, by="edge_id")
     return(line_df)
-}
+}    
+
 
 # Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),
