@@ -244,6 +244,7 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # Assumes decompose retains vertex ids
     disconnected_subgraphs <- decompose.graph(disconnected)
     disconnected_roots <- sapply(disconnected_subgraphs, root_selector) 
+    print(disconnected_roots)
     disconnected_directed_subgraphs <- lapply(disconnected_roots, 
                                               get_directed_subgraph, 
                                               disconnected)
