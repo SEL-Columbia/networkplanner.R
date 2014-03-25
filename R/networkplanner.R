@@ -35,8 +35,29 @@ setClass("NetworkPlan", representation(network="igraph"))
 #' @export
 download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
-    username = "zmyao88"
-    password = "35506701"
+    
+    # In condition that user didn't give directory_name
+    # Use working dirercory of R seesion and Scenario number
+    # as the folder to save data 
+    if (is.null(directory_name)){
+        directory_name <- getwd()
+        directory_name <- paste(directory_name, scenario_number, sep="/")
+    }
+    
+    # Standardize/ convert to absolute path
+    # a hack to suppress the warning message if the directory_name
+    # is not a folder yet
+    suppressWarnings(base_dir <- normalizePath(directory_name))    
+
+        
+    # Create a Boolean flag indicating if the repo if private
+    # error handling for only 1 NULL value for user & pass
+    private <- (!is.null(username) & !is.null(password))
+    if (!sum(!is.null(username), !is.null(password)) %in% c(0,2)){
+        stop("You MUST input BOTH username and password if it is a PRIVATE scenario, 
+                and leave user and password blank if it is PUBLIC scenario")
+    }
+    
     # reconscructing url for the zip file
     scenario_addr <- paste("scenarios", 
                            paste(scenario_number, "zip", sep="."), sep="/")
@@ -44,30 +65,33 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     
     # Create Curl handle with cookie jar
     my_curl <- getCurlHandle()
-    my_curl <- curlSetOpt(cookiejar="cookies.txt",
+    my_curl <- curlSetOpt(cookiejar="",
                           useragent = "Mozilla/5.0",
                           followlocation = TRUE,
                           curl=my_curl)
-    
-    
+
+    # If it is a private repo, then 
     # login network planner and save session into cookie.jar
-    LOGINURL = "http://networkplanner.modilabs.org/people/login_"
-    pars=list(
-        username=username,
-        password=password)
-    postForm(LOGINURL, .params = pars, curl=my_curl)
+    if (private == TRUE){
+        log_link <- "people/login_"    
+        login_url <- paste(np_url, log_link, sep="")
+        pars=list(
+            username=username,
+            password=password)
+        postForm(login_url, .params = pars, curl=my_curl)    
+    }
     
 
-    # Download temp zip files to local
-    f = CFILE("tmp.zip", mode="wb")
+    # download scenarios to the tmp.zip file in the R session directory
+    f <- CFILE("tmp.zip", mode="wb")
     curlPerform(url = full_url, writedata = f@ref, curl=my_curl)
     close(f)
     
-    unzip("tmp.zip", exdir = "./tmp")
+    # Assume unzip will create the folder, which seem to be a safe assumption 
+    # Now unzip the files into base_dir(directory user provided)
+    # remove the zipfile once unzipping is finished
+    unzip("tmp.zip", exdir = base_dir)
     file.remove("tmp.zip")
-    
-    
-    stop("Not yet Implemented")
 }
 
 #' Read network plan from a directory in the filesystem
