@@ -24,14 +24,16 @@ setClass("NetworkPlan", representation(network="igraph"))
 
 #' Download scenario from networkplanner into the given directory
 #'
-#' @param scenario_number scenario_number on http://networkplanner.modilabs.org
+#' @param scenario_number scenario_number on http://networkplanner.modilabs.org.
 #' @param directory_name path to write the downloaded scenario into. By default,
 #'        and if directory_name==NULL, directory_name will be scenario number within
-#'        current working directory
-#' @param userpwd username and password, separated by : (ex. USER:PASSWORD). If NULL,
-#'        we assume that the scenario is public
+#'        current working directory.
+#' @param username username to login to http://networkplanner.modilabs.org. If NULL,
+#'        we assume that the scenario is public.
+#' @param password password associated with the previous username. If NULL, 
+#'        we assume that the scenario is public. 
 #' @param np_url URL of the network planner instance to download scenario from. By default,
-#'        it is http://networkplanner.modilabs.org
+#'        it is http://networkplanner.modilabs.org.
 #' @export
 download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
