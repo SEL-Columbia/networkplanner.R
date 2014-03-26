@@ -16,6 +16,7 @@ Depends:
     lubridate,
     sp,
     rgdal,
+    rgeos,
     abind,
     geosphere
 License: TBD

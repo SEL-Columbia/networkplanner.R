@@ -13,7 +13,7 @@ require(maptools)
 setOldClass("igraph")
 
 # The NetworkPlan object
-setClass("NetworkPlan", representation(network="igraph"))
+setClass("NetworkPlan", representation(network="igraph", proj="character"))
 # Handle case with an existing_network as a subclass for now 
 # There's probably a better way to handle it, but without this R complains
 # about the existing_network slot being empty if there's nothing there
@@ -69,7 +69,7 @@ read_networkplan = function(directory_name, debug=F) {
     network <- assign_distances(network, proj4string)
    
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
-    new("NetworkPlan", network=network)
+    new("NetworkPlan", network=network, proj=proj4string)
 }
 
 
@@ -99,8 +99,6 @@ default_accumulator <- function(node_df, edge_df, g, vid) {
 #' of SpatialPoints)
 #'
 #' @param np a NetworkPlan
-#'        TODO:  Remove roots once we set them in read method
-#' @param roots the indices of root vertices to sequence from
 #' @param selector function that returns which vertex (by id) in the
 #'        "frontier" of the search gets selected next based on 
 #'        SpatialPointsDataFrame
@@ -239,14 +237,15 @@ write.NetworkPlan = function(np, directory_name,
     
     # getting edge SPLDF from NP object
     output_spldf <- get_edge_spldf(np)
-    
+    output_spldf@proj4string <- CRS(np@proj)
+
     # output files based on choice 
     if (nodeFormat == 'csv'){
-        csv_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence.csv")
+        csv_dir <- file.path(base_dir, "metrics-local-sequenced.csv")
         write.csv(output_df, csv_dir, row.names=FALSE)    
     }
     if (edgeFormat =='shp'){
-        spldf_dir <- file.path(base_dir, "metrics-local-grid-only-rollout_sequence")
+        spldf_dir <- file.path(base_dir, "proposed-sequenced")
         writeLinesShape(output_spldf, spldf_dir)    
     }   
     
@@ -286,6 +285,10 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"
  
         # sequence it via the sequence_selector and return 
         np <- sequence_plan(np, selector=selector)
+        
+        #now add sequence number to edges
+        real_nodes <- which(degree(np@network, mode="in")!=0)
+        E(np@network)[ to(real_nodes) ]$sequence <- V(np@network)[real_nodes]$sequence
         np
     }
 )
