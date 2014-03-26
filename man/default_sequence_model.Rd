@@ -5,10 +5,10 @@
 \format{\preformatted{List of 2
  $ accumulator:function (node_df, edge_df, g, vid)  
   ..- attr(*, "srcref")=Class 'srcref'  atomic [1:8] 93 24 95 1 24 1 93 95
-  .. .. ..- attr(*, "srcfile")=Classes 'srcfilecopy', 'srcfile' <environment: 0x4426478> 
+  .. .. ..- attr(*, "srcfile")=Classes 'srcfilecopy', 'srcfile' <environment: 0x6b5cd60> 
  $ selector   :function (node_df)  
   ..- attr(*, "srcref")=Class 'srcref'  atomic [1:8] 81 21 83 1 21 1 81 83
-  .. .. ..- attr(*, "srcfile")=Classes 'srcfilecopy', 'srcfile' <environment: 0x4426478> 
+  .. .. ..- attr(*, "srcfile")=Classes 'srcfilecopy', 'srcfile' <environment: 0x6b5cd60> 
 }}
 \usage{
 default_sequence_model

@@ -7,11 +7,7 @@ of SpatialPoints)}
 sequence_plan(np, selector = default_selector)
 }
 \arguments{
-  \item{np}{a NetworkPlan TODO: Remove roots once we set
-  them in read method}
-
-  \item{roots}{the indices of root vertices to sequence
-  from}
+  \item{np}{a NetworkPlan}
 
   \item{selector}{function that returns which vertex (by
   id) in the "frontier" of the search gets selected next
