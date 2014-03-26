@@ -5,6 +5,7 @@ require(stringr)
 require(plyr)
 require(abind)
 require(maptools)
+require(RCurl)
 
 #' @include util.R
 #' @include sequence_models.R 
@@ -23,18 +24,81 @@ setClass("NetworkPlan", representation(network="igraph", proj="character"))
 
 #' Download scenario from networkplanner into the given directory
 #'
-#' @param scenario_number scenario_number on http://networkplanner.modilabs.org
+#' @param scenario_number scenario_number on http://networkplanner.modilabs.org.
 #' @param directory_name path to write the downloaded scenario into. By default,
 #'        and if directory_name==NULL, directory_name will be scenario number within
-#'        current working directory
-#' @param userpwd username and password, separated by : (ex. USER:PASSWORD). If NULL,
-#'        we assume that the scenario is public
+#'        current working directory.
+#' @param username username to login to http://networkplanner.modilabs.org. If NULL,
+#'        we assume that the scenario is public.
+#' @param password password associated with the previous username. If NULL, 
+#'        we assume that the scenario is public. 
 #' @param np_url URL of the network planner instance to download scenario from. By default,
-#'        it is http://networkplanner.modilabs.org
+#'        it is http://networkplanner.modilabs.org.
 #' @export
-download_scenario = function(scenario_number, directory_name=NULL, userpwd=NULL, 
+download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
-    stop("Not Implemented")
+    
+    ## TODO: Figure out how to handle case that user didnt give login info 
+    ## but the SCENARIO happens to be PRIVATE, can't think of a way to validate
+    ## until the zip file is downloaded.
+
+    
+    # In condition that user didn't give directory_name
+    # Use working dirercory of R seesion and Scenario number
+    # as the folder to save data 
+    if (is.null(directory_name)){
+        directory_name <- getwd()
+        directory_name <- paste(directory_name, scenario_number, sep="/")
+    }
+    
+    # Standardize/ convert to absolute path
+    # a hack to suppress the warning message if the directory_name
+    # is not a folder yet
+    suppressWarnings(base_dir <- normalizePath(directory_name))    
+
+        
+    # Create a Boolean flag indicating if the repo if private
+    # error handling for only 1 NULL value for user & pass
+    private <- (!is.null(username) & !is.null(password))
+    if (!sum(!is.null(username), !is.null(password)) %in% c(0,2)){
+        stop("You MUST input BOTH username and password if it is a PRIVATE scenario, 
+                and leave user and password blank if it is PUBLIC scenario")
+    }
+    
+    # reconscructing url for the zip file
+    scenario_addr <- paste("scenarios", 
+                           paste(scenario_number, "zip", sep="."), sep="/")
+    full_url <- paste(np_url, scenario_addr, sep="")
+    
+    # Create Curl handle with cookie jar
+    my_curl <- getCurlHandle()
+    my_curl <- curlSetOpt(cookiejar="",
+                          useragent = "Mozilla/5.0",
+                          followlocation = TRUE,
+                          curl=my_curl)
+
+    # If it is a private repo, then 
+    # login network planner and save session into cookie.jar
+    if (private == TRUE){
+        log_link <- "people/login_"    
+        login_url <- paste(np_url, log_link, sep="")
+        pars=list(
+            username=username,
+            password=password)
+        postForm(login_url, .params = pars, curl=my_curl)    
+    }
+    
+
+    # download scenarios to the tmp.zip file in the R session directory
+    f <- CFILE("tmp.zip", mode="wb")
+    curlPerform(url = full_url, writedata = f@ref, curl=my_curl)
+    close(f)
+    
+    # Assume unzip will create the folder, which seem to be a safe assumption 
+    # Now unzip the files into base_dir(directory user provided)
+    # remove the zipfile once unzipping is finished
+    unzip("tmp.zip", exdir = base_dir)
+    file.remove("tmp.zip")
 }
 
 #' Read network plan from a directory in the filesystem
