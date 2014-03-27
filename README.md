@@ -71,6 +71,7 @@ Installation
 # devtools is required for install_github
 library(devtools)
 install_github("SEL-Columbia/networkplanner.R")
+```
 
 Usage Example
 ---
