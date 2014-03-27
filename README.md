@@ -65,14 +65,21 @@ Functions
 ?? grid-length
 ?? units
 
+Installation
+---
+```
+# devtools is required for install_github
+library(devtools)
+install_github("SEL-Columbia/networkplanner.R")
+
 Usage Example
 ---
 ```
-# Download scenario (eg. 531) from networkplanner
-np <- read_networkplan('531/metrics-local.csv', '531/metrics.shp')
-np_sequenced <- sequence_ratio(np, numerator='annualSales', denominator='Investment', sight='near')
-# equivalent to:
-np_sequenced <- sequence(np, function(x) { x$annualSales / x$Investment }, sight='near')
-# write sequenced networkplan to a directory (creates a nodes.csv and edges.shp file in that dir)
-write.NetworkPlan(np_sequenced, 'plan_directory')
+# assumes networkplanner directory is on local machine
+base_dir <- "np_data/63"
+np <- read_networkplan(base_dir)
+# sequence the plan
+np_sequenced <- sequence_plan_far(np, sequence_model=mv_v_dmd_sequence_model)
+# write sequenced networkplan to a directory 
+write.NetworkPlan(np_sequenced, base_dir)
 ```
