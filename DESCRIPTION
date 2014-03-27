@@ -9,7 +9,7 @@ Description: Pre- and post-processes data from NetworkPlanner
     (http://networkplanner.modilabs.org)
 Depends:
     R (>= 2.15.1),
-    igraph (>=0.7.0),
+    igraph (>= 0.7.0),
     stringr,
     plyr,
     RCurl,
