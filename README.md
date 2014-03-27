@@ -77,7 +77,7 @@ Usage Example
 ---
 ```
 # assumes networkplanner directory is on local machine
-base_dir <- "C:/Users/Downloads/2940/"
+base_dir <- "C:/Users/Downloads/2940"
 np <- read_networkplan(base_dir)
 # sequence the plan
 np_sequenced <- sequence_plan_far(np, sequence_model=mv_v_dmd_sequence_model)
