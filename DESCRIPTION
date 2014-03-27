@@ -14,6 +14,7 @@ Depends:
     plyr,
     RCurl,
     lubridate,
+    maptools,
     sp,
     rgdal,
     rgeos,
