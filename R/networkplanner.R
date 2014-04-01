@@ -95,7 +95,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     # Now unzip the files into base_dir(directory user provided)
     # remove the zipfile once unzipping is finished
     unzip("tmp.zip", exdir = base_dir)
-#     file.remove("tmp.zip")
+    file.remove("tmp.zip")
 }
 
 #' Read network plan from a directory in the filesystem
