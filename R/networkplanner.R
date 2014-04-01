@@ -6,6 +6,7 @@ require(plyr)
 require(abind)
 require(maptools)
 require(RCurl)
+require(R.utils)
 
 #' @include util.R
 #' @include sequence_models.R 
@@ -52,10 +53,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     }
     
     # Standardize/ convert to absolute path
-    # a hack to suppress the warning message if the directory_name
-    # is not a folder yet
-    suppressWarnings(base_dir <- normalizePath(directory_name))    
-
+    base_dir <- getAbsolutePath(directory_name)
         
     # Create a Boolean flag indicating if the repo if private
     # error handling for only 1 NULL value for user & pass
@@ -108,7 +106,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
 #' @return A NetworkPlan object
 #' @export
 read_networkplan = function(directory_name, debug=F) {
-    base_dir = normalizePath(directory_name)
+    base_dir = getAbsolutePath(directory_name)
     
     # read nodes and assign id
     metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
@@ -296,7 +294,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 write.NetworkPlan = function(np, directory_name, 
                              nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
     
-    base_dir = normalizePath(directory_name)
+    base_dir <- getAbsolutePath(directory_name)
     
     # subsetting node_df according to includeFake
     node_df <- get.data.frame(np@network, what="vertices")
