@@ -52,10 +52,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     }
     
     # Standardize/ convert to absolute path
-    # a hack to suppress the warning message if the directory_name
-    # is not a folder yet
-    suppressWarnings(base_dir <- normalizePath(directory_name))    
-
+    base_dir <- R.utils::getAbsolutePath(directory_name)
         
     # Create a Boolean flag indicating if the repo if private
     # error handling for only 1 NULL value for user & pass
@@ -92,7 +89,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     # download scenarios to the tmp.zip file in the R session directory
     f <- CFILE("tmp.zip", mode="wb")
     curlPerform(url = full_url, writedata = f@ref, curl=my_curl)
-    close(f)
+    RCurl::close(f)
     
     # Assume unzip will create the folder, which seem to be a safe assumption 
     # Now unzip the files into base_dir(directory user provided)
@@ -108,7 +105,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
 #' @return A NetworkPlan object
 #' @export
 read_networkplan = function(directory_name, debug=F) {
-    base_dir = normalizePath(directory_name)
+    base_dir = R.utils::getAbsolutePath(directory_name)
     
     # read nodes and assign id
     metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
@@ -296,7 +293,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 write.NetworkPlan = function(np, directory_name, 
                              nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
     
-    base_dir = normalizePath(directory_name)
+    base_dir <- R.utils::getAbsolutePath(directory_name)
     
     # subsetting node_df according to includeFake
     node_df <- get.data.frame(np@network, what="vertices")
