@@ -87,9 +87,9 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     
 
     # download scenarios to the tmp.zip file in the R session directory
-    eval({f <- CFILE("tmp.zip", mode="wb")
-    curlPerform(url = full_url, writedata = f@ref, curl=my_curl)})
-    close(f)
+    f <- CFILE("tmp.zip", mode="wb")
+    curlPerform(url = full_url, writedata = f@ref, curl=my_curl)
+    RCurl::close(f)
     
     # Assume unzip will create the folder, which seem to be a safe assumption 
     # Now unzip the files into base_dir(directory user provided)
