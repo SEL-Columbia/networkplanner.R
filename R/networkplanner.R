@@ -52,7 +52,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     }
     
     # Standardize/ convert to absolute path
-    base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name))
+    base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
         
     # Create a Boolean flag indicating if the repo if private
     # error handling for only 1 NULL value for user & pass
@@ -105,7 +105,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
 #' @return A NetworkPlan object
 #' @export
 read_networkplan = function(directory_name, debug=F) {
-    base_dir = R.utils::getAbsolutePath(normalizePath(directory_name))
+    base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # read nodes and assign id
     metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
@@ -293,7 +293,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 write.NetworkPlan = function(np, directory_name, 
                              nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
     
-    base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name))
+    base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # subsetting node_df according to includeFake
     node_df <- get.data.frame(np@network, what="vertices")
