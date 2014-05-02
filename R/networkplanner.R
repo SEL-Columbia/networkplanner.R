@@ -14,13 +14,13 @@ require(RCurl)
 setOldClass("igraph")
 
 # The NetworkPlan object
-setClass("NetworkPlan", representation(network="igraph", proj="character"))
+setClass("NetworkPlan", representation(network="igraph", proj="character", standalones='SpatialPointsDataFrame'))
 # Handle case with an existing_network as a subclass for now 
 # There's probably a better way to handle it, but without this R complains
 # about the existing_network slot being empty if there's nothing there
 # setClass("NetworkPlanEx", representation(existing_network="SpatialLinesDataFrame"),
 #                                        contains="NetworkPlan")
-
+# NetworkPlan object ideally tracks standalone nodes as well as ones with an igraph format
 
 #' Download scenario from networkplanner into the given directory
 #'
@@ -136,9 +136,12 @@ read_networkplan = function(directory_name, debug=F) {
     # Now assign distances to edges (might be faster to do it within create_graph, but
     # they get lost within the dominator.tree calls in create_directed_trees)
     network <- assign_distances(network, proj4string)
+    
+    #Preserve nodes that are not proposed network
+    standalone_nodes <- subset(nodes, Metric...System != 'grid')
    
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
-    new("NetworkPlan", network=network, proj=proj4string)
+    new("NetworkPlan", network=network, proj=proj4string, standalones=standalone_nodes)
 }
 
 
@@ -294,7 +297,8 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 #' vertex/node csv file, Default is set to False
 #' @export
 write.NetworkPlan = function(np, directory_name, 
-                             nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
+                             nodeFormat='csv', edgeFormat='shp', includeFake=FALSE,
+                             includeAll = FALSE) {
     
     base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
@@ -302,6 +306,12 @@ write.NetworkPlan = function(np, directory_name,
     node_df <- get.data.frame(np@network, what="vertices")
     if (includeFake == FALSE){
         output_df <- subset(node_df, !is_fake)
+    }
+    # appending node_df according to include non grid nodes
+    if (includeAll == TRUE){
+      standalones <- np@standalones
+      standalones$Metric...System <- as.character(standalones$Metric...System)
+      output_df <- rbind.fill(output_df, as.data.frame(standalones))
     }
     
     # getting edge SPLDF from NP object
