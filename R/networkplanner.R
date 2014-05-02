@@ -47,7 +47,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
 
     
     # In condition that user didn't give directory_name
-    # Use working dirercory of R seesion and Scenario number
+    # Use working directory of R session and Scenario number
     # as the folder to save data 
     if (is.null(directory_name)){
         directory_name <- getwd()
@@ -65,7 +65,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
                 and leave user and password blank if it is PUBLIC scenario")
     }
     
-    # reconscructing url for the zip file
+    # reconstructing url for the zip file
     scenario_addr <- paste("scenarios", 
                            paste(scenario_number, "zip", sep="."), sep="/")
     full_url <- paste(np_url, scenario_addr, sep="")
@@ -129,7 +129,7 @@ read_networkplan = function(directory_name, debug=F) {
     # root selector selects 
     subnet_root_selector <- function(g) {
         demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
-        root_vid <- which(demands==max(demands))[1]
+        root_index <- which(demands==max(demands))[1]
     }
     network <- create_directed_trees(network, root_selector=subnet_root_selector)
     
