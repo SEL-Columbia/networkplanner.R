@@ -90,7 +90,11 @@ assign_distances <- function(network, proj4string="") {
     g
 }
 
-# Get the co-ordinate matrix out of a SpatialLinesDataFrame (as a three dimensional array)
+# Get the co-ordinate matrix out of a SpatialLinesDataFrame as a three dimensional array
+# Dimensions:  
+#  1:  The segments
+#  2:  The points of the segment (should only be 2 per segment)
+#  3:  The coordinates per point (again, only 2)
 # Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
 get_segment_matrix = function(sldf) {
     # Looping through every line slot in SLDF object 
@@ -137,7 +141,11 @@ test_edge_pairs <- function(segment_node_df, p1, p2, network) {
     expect_equal(nrow(p1_p2)==(2*nrow(edge_df)))
 }
    
-# create graph from node_dataframe (NOT sp) and segment_matrix
+#' create graph from node_dataframe (NOT sp) and segment_matrix
+#' 
+#' @param metrics_df dataframe representing the nodes (with attributes) of the graph
+#' @param segment_matrix 3 dimensional matrix of segments representing a network
+#' @return an igraph object of merged metrics_df nodes and segment_matrix segments 
 create_graph <- function(metrics_df, segment_matrix, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
     
     p1 <- segment_matrix[1:dim(segment_matrix)[1],1,1:2]
@@ -158,23 +166,30 @@ create_graph <- function(metrics_df, segment_matrix, proj4string="+proj=longlat 
     # first, make sure that metrics_df has an nid, representing
     # a unique id for the node (will make it easier to distinguish "fake" nodes)
     metrics_df$nid <- as.numeric(row.names(metrics_df))
+    # assign it a vid too, which will be used to distinguish off-network vertices later
+    metrics_df$vid <- -(1:nrow(metrics_df))
     vertex_df <- get.data.frame(network, what=c("vertices"))
     # first get the x,y's to join via
     vertex_df <- merge(vertex_df, segment_node_df, by.x="vid", by.y="id")
-    # join to metrics_df and keep all values from vertex_df
-    vertex_df <- merge(vertex_df, metrics_df, by.x=c("X","Y"), by.y=c("X","Y"), all.x=TRUE)
-    # should be same size (vertices were created from same set of nodes in segment_node_df)
-    stopifnot(nrow(vertex_df)==nrow(segment_node_df))
+    # join to metrics_df and keep all values from both (so we'll retain "off-grid" nodes too)
+    vertex_df <- merge(vertex_df, metrics_df, by.x=c("X","Y"), by.y=c("X","Y"), all=TRUE)
+    # vertex_df should be same size or bigger than metrics_df
+    stopifnot(nrow(vertex_df) >= nrow(metrics_df))
     
-    edge_df <- get.data.frame(network, what="edges")
-    #reorder vertex df names so that vid is 1st (required to associate with correct edge)
-    vertex_names <- c(c("vid"), setdiff(names(vertex_df), c("vid")))
-    # vertex_names <- c(c("vid"), names(vertex_df))
+    # ensure that vid column has valid/unique values: 
+    #  positive ints for vertices that lie on network
+    #  negative ints for vertices that don't 
+    vertex_df <- transform(vertex_df, vid=ifelse(is.na(vid.x), vid.y, vid.x))
+    # now get rid of vid.x/vid.y
+    vertex_names <- setdiff(names(vertex_df), c("vid.x", "vid.y"))
+    # reorder vertex df names so that vid is 1st (required by igraph to associate with correct edge)
+    vertex_names <- c(c("vid"), setdiff(vertex_names, c("vid")))
     # Because the "vid" column gets lost when it's used as the 1st "linking"
-    # column by graph.data.frame, we need to duplicate this column and rename
-    # it
+    # column by graph.data.frame, we need to rename it (do we?)
     vertex_df <- vertex_df[,vertex_names]
     names(vertex_df)[1] <- "edge_link_id"
+    
+    edge_df <- get.data.frame(network, what="edges")
     
     #TODO:  do we want directed/undirected here?
     network <- graph.data.frame(edge_df, directed=FALSE, vertex_df)
@@ -212,6 +227,10 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     connected <- subgraphs$connected
     disconnected <- subgraphs$disconnected
 
+    # add vertex id to disconnected graph so we can look it up from 
+    # the subgraph vertices later
+    V(disconnected)$vid <- as.numeric(V(disconnected))
+
     # now find the roots of the connected subgraph
     fake_vids <- as.numeric(V(connected)[is.na(V(connected)$nid)])
 
@@ -241,10 +260,16 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # plot(connected_directed_graph, vertex.size=4, edge.arrow.size=0.1)
     
     # Now work on disconnected net
-    # Assumes decompose retains vertex ids
+    # Assumes decompose retains vertex ids (it DOES NOT!)
     disconnected_subgraphs <- decompose.graph(disconnected)
-    disconnected_roots <- sapply(disconnected_subgraphs, root_selector) 
-    print(disconnected_roots)
+    # wrapper for root selector to decouple it from how we
+    # maintain link between subgraphs and parent graph (via vid)
+    select_vids <- function(g) { 
+        root_index <- root_selector(g)
+        V(g)[root_index]$vid
+    }
+    disconnected_roots <- sapply(disconnected_subgraphs, select_vids) 
+    # print(disconnected_roots)
     disconnected_directed_subgraphs <- lapply(disconnected_roots, 
                                               get_directed_subgraph, 
                                               disconnected)
