@@ -120,8 +120,14 @@ read_networkplan = function(directory_name, debug=F) {
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
     # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
      
-    segment_matrix <- get_segment_matrix(network_shp)
-    network <- create_graph(metrics_df, segment_matrix) 
+    segments_fids <- decompose_spatial_lines(network_shp)
+    network <- create_graph(metrics_df, segments_fids$segments, segments_fids$fids) 
+
+    # Keep original edges which have the FID and set the original vertex id
+    # so that we can merge back once the directed trees have been created
+    orig_edge_df <- get.data.frame(network, what="edges")
+    V(network)$orig_v_id <- 1:length(V(network))
+    
 
     # Now create directed graph from "fake" nodes (for trees connected
     # to the existing network) and "roots" (for trees that are NOT connected)
@@ -137,6 +143,25 @@ read_networkplan = function(directory_name, debug=F) {
     # they get lost within the dominator.tree calls in create_directed_trees)
     network <- assign_distances(network, proj4string)
    
+    # Re-assign the FIDS (need to do both sides because original was undirected)
+    # need to map original vertex ids to new ones
+    orig_new_v_map <- order(V(network)$orig_v_id)
+    orig_edge_df$new_from <- orig_new_v_map[orig_edge_df$from]
+    orig_edge_df$new_to <- orig_new_v_map[orig_edge_df$to]
+    from_to_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_from, to=orig_edge_df$new_to]),]
+    to_from_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_to, to=orig_edge_df$new_from]),]
+    new_edge_df <- data.frame(
+                    from=c(from_to_orig_edge_df$new_from, to_from_orig_edge_df$new_to), 
+                    to=c(from_to_orig_edge_df$new_to, to_from_orig_edge_df$new_from), 
+                    FID=c(from_to_orig_edge_df$FID, to_from_orig_edge_df$FID))
+
+    network[from=new_edge_df$from, to=new_edge_df$to, attr="FID"] <- new_edge_df$FID
+    # network[from=from_to_orig_edge_df$new_from, to=from_to_orig_edge_df$new_to, attr="FID"] <- from_to_orig_edge_df$FID
+    # network[from=to_from_orig_edge_df$new_to, to=to_from_orig_edge_df$new_from, attr="FID"] <- to_from_orig_edge_df$FID
+    
+    # Remove temp vertex attributes
+    network <- remove.vertex.attribute(network, "orig_v_id") 
+
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
     new("NetworkPlan", network=network, proj=proj4string)
 }
@@ -214,7 +239,7 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
         # only apply to "real" nodes
         num_real_nodes <- length(V(np@network)[!V(np@network)$is_fake])
         stopifnot(length(node_sequence)==num_real_nodes)
-        V(np@network)[node_sequence]$sequence <- 1:num_real_nodes
+        V(np@network)[node_sequence]$far.sighted.sequence <- 1:num_real_nodes
         np
     }
 )
@@ -260,17 +285,18 @@ setMethod("accumulate", signature(np="NetworkPlan"),
         new_nodes <- merge(nodes, result_nodes, by.x="vid", by.y="vid", all.x=TRUE)
 
         # join to upstream edges
-        new_edges <- merge(edges, result_nodes, by.x="to", by.y="vid", all.x=TRUE)
+        # Let's NOT do this...user can join nodes to upstream edges via Upstream.FID later on
+        # new_edges <- merge(edges, result_nodes, by.x="to", by.y="vid", all.x=TRUE)
+
+        # reorder the edge names (graph.data.frame needs from, to in 1st 2 cols)
+        # edge_names <- c(c("from", "to"), setdiff(names(new_edges), c("from", "to")))
+        # new_edges <- new_edges[,edge_names]
 
         # reorder the vertex names (graph.data.frame needs vertex id in 1st col)
         vertex_names <- c(c("vid"), setdiff(names(new_nodes), c("vid")))
         new_vertices <- new_nodes[,vertex_names]
 
-        # reorder the edge names (graph.data.frame needs from, to in 1st 2 cols)
-        edge_names <- c(c("from", "to"), setdiff(names(new_edges), c("from", "to")))
-        new_edges <- new_edges[,edge_names]
-
-        g <- graph.data.frame(new_edges, directed=TRUE, new_vertices)
+        g <- graph.data.frame(edges, directed=TRUE, new_vertices)
         # get rid of the name attribute as this leads to confusion
         g <- remove.vertex.attribute(g, "name")
 
@@ -357,7 +383,7 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"
         
         #now add sequence number to edges
         real_nodes <- which(degree(np@network, mode="in")!=0)
-        E(np@network)[ to(real_nodes) ]$sequence <- V(np@network)[real_nodes]$sequence
+        E(np@network)[ to(real_nodes) ]$far.sighted.sequence <- V(np@network)[real_nodes]$far.sighted.sequence
         np
     }
 )

@@ -21,18 +21,25 @@ pop_sequence_model <- list(accumulator=pop_accumulate,
 # Model for computing downstream MV Line per kwh
 # and sequencing by selecting the nodes with min values first
 #' helper function
-mv_v_dmd_get_dist_to_parent <- function(g, vid) {
+mv_v_dmd_get_upstream_edge_fields <- function(g, vid) {
     distance <- 0
+    fid <- -1
     par <- V(g)[ nei(vid, mode="in") ]
     if(length(par)) {
         distance <- E(g)[ par %->% vid ]$distance
+        fid <- E(g)[ par %->% vid ]$FID
     } 
-    distance
+    l <- list(distance=distance, FID=fid)
+    l
 }
     
 #' @export
 mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) { 
-    distance <- mv_v_dmd_get_dist_to_parent(g, vid)
+    edge_fields <- mv_v_dmd_get_upstream_edge_fields(g, vid)
+    # get the upstream verts to get the root
+    upstream_vertices <- neighborhood(g, .Machine$integer.max, vid, mode="in")[[1]]
+    root_vertex <- upstream_vertices[length(upstream_vertices)] 
+    distance <- edge_fields$distance
     dmd_yr <- V(g)[vid]$Demand...Projected.nodal.demand.per.year
     all_distances <- c(distance, edge_df$distance)
     sum_distance <- sum(all_distances)
@@ -46,15 +53,20 @@ mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) {
     if(dmd_yr != 0) {
         mv_v_dmd <- distance/dmd_yr
     } 
-    data.frame(distance=distance,
-               mv_v_dmd=mv_v_dmd,
-               sum_distance=sum_distance, 
-               sum_dmd_yr=sum_dmd_yr,
-               sum_mv_v_dmd=sum_mv_v_dmd) 
+
+    # These are the fields added to each node representing cumulative
+    # downstream values of interest
+    data.frame(Distance=distance,
+               Distance.per.Demand=mv_v_dmd,
+               Total.Downstream.Network.Extent.m=sum_distance,
+               Total.Downstream.Demand.kWh=sum_dmd_yr,
+               Total.Distance.per.Demand=sum_mv_v_dmd,
+               root=root_vertex,
+               Upstream.FID=edge_fields$FID) 
 }
 #' @export
 mv_v_dmd_select_min <- function(df) {
-    subset(df, subset=(min(df$sum_mv_v_dmd) == df$sum_mv_v_dmd))
+    subset(df, subset=(min(df$Total.Distance.per.Demand) == df$Total.Distance.per.Demand))
 }
 #' @export
 mv_v_dmd_sequence_model <- list(accumulator=mv_v_dmd_accumulate,

@@ -28,6 +28,30 @@ get_coord_dataframe <- function(sldf) {
     coord_matrix
 }
     
+# create undirected graph via segment_matrix/nodes via graph.data.frame
+# segment_node_df must have an id column that represents the index of the 
+# node in the dataframe
+get_undirected_graph <- function(segment_matrix, segment_node_df, fids) {
+    from_nodes <- as.data.frame(segment_matrix[1:nrow(segment_matrix),1,1:2])
+    names(from_nodes) <- c("X", "Y")
+    to_nodes <- as.data.frame(segment_matrix[1:nrow(segment_matrix),2,1:2])
+    names(to_nodes) <- c("X", "Y")
+    # need the ids to ensure order after the merge
+    from_nodes$edge_id <- 1:nrow(from_nodes)
+    to_nodes$edge_id <- 1:nrow(to_nodes)
+    from_coord_merge <- merge(from_nodes, segment_node_df, by.x=c("X","Y"), by.y=c("X","Y"))
+    to_coord_merge <- merge(to_nodes, segment_node_df, by.x=c("X","Y"), by.y=c("X","Y"))
+    # now re-order according to edge_ids
+    from_df <- from_coord_merge[with(from_coord_merge, order(edge_id)),] 
+    to_df <- to_coord_merge[with(to_coord_merge, order(edge_id)),] 
+    edge_df <- data.frame(from=from_df$id, to=to_df$id, FID=fids)
+    # re-order columns (graph.data.frame requires id column 1st) 
+    vertex_names <- c(c("id"), setdiff(names(segment_node_df), c("id")))
+    vertex_df <- segment_node_df[,vertex_names] 
+    g <- graph.data.frame(edge_df, directed=FALSE, vertex_df)
+    g <- remove.vertex.attribute(g, "name")
+}
+
 # get adjacency matrix rep of sldf referencing coord_df ids
 # TODO:  Not sure why I get some cycles with this method
 get_adjacency_matrix <- function(segment_matrix, segment_node_df, weighted=FALSE, proj4string="") {
@@ -96,24 +120,38 @@ assign_distances <- function(network, proj4string="") {
 #  2:  The points of the segment (should only be 2 per segment)
 #  3:  The coordinates per point (again, only 2)
 # Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
-get_segment_matrix = function(sldf) {
+# AND get the list of FIDs 
+# return them both as elements of a list
+decompose_spatial_lines = function(sldf) {
+    
     # Looping through every line slot in SLDF object 
-    # and save the 2X2 matrix representation of a single edge into 2 3D array. 
-    line_coords <- lapply(sldf@lines, function(l) {
-        
+    # save the 2X2 matrix representation of a single edge into 2 3D array as the 1st member of the list
+    # and save the FID as another element of the list
+    # So, for each element in the resulting list there is a list of segments s where:
+    #   s[[1]]:  the 2X2 matrix representing the segment
+    #   s[[2]]:  the FID of the parent shapefile element
+    line_coords_fids <- lapply(sldf@lines, function(l) {
+        FID <- as.integer(l@ID)
         lapply(l@Lines, function(segment) {
             my_coords <- segment@coords
             n <- dim(my_coords)[1]
             if(n == 2){
-                array(data=my_coords, dim=c(1,2,2))
+                list(array(data=my_coords, dim=c(1,2,2)), FID)
             }else{
-                laply(1:(n-1), function(row_num){
+                list(laply(1:(n-1), function(row_num){
                     cbind(my_coords[row_num, ], my_coords[row_num+1, ])
-                })    
+                }), FID)
             }
             
         })    
     })
+    
+    # extract the line_coords from the above
+    line_coords <- lapply(line_coords_fids, function(l) { lapply(l, function(inner_l) { inner_l[[1]] } ) } )
+
+    # extract the fids from the above
+    fids <- lapply(line_coords_fids, function(l) { lapply(l, function(inner_l) { inner_l[[2]] } ) } )
+
     # Looping through every cell in the nested list structure and concatenate the 3D arrays 
     # into the master coordinate array that Adjacency matrix function takes
     line_coords <- do.call(abind, list(lapply(
@@ -121,11 +159,18 @@ get_segment_matrix = function(sldf) {
             do.call(abind, list(l, along=1))
         }),
         along=1))
+
+    fids <- do.call(abind, list(lapply(
+        fids, function(l){ 
+            do.call(abind, list(l, along=1))
+        }),
+        along=1))
     
     # Safety measure to make sure that the coordinate matrix is Nx2x2, 
     # in which N is the number of sigle point in SLDF
     stopifnot(dim(line_coords)[2:3] == c(2,2))
-    return(line_coords)
+    l <- list(segments=line_coords, fids=fids)
+    return(l)
 }
 
 test_edge_pairs <- function(segment_node_df, p1, p2, network) {
@@ -141,21 +186,25 @@ test_edge_pairs <- function(segment_node_df, p1, p2, network) {
     expect_equal(nrow(p1_p2)==(2*nrow(edge_df)))
 }
    
-#' create graph from node_dataframe (NOT sp) and segment_matrix
+#' create graph from node dataframe (NOT sp) and segment_matrix
 #' 
 #' @param metrics_df dataframe representing the nodes (with attributes) of the graph
-#' @param segment_matrix 3 dimensional matrix of segments representing a network
+#' @param segment_matrix NX2X2 matrix of segments X end_points X coordinates representing a network
+#' @param fids set of fids associated with each segment in matrix to be associated with edges
 #' @return an igraph object of merged metrics_df nodes and segment_matrix segments 
-create_graph <- function(metrics_df, segment_matrix, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
+create_graph <- function(metrics_df, segment_matrix, fids, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
     
     p1 <- segment_matrix[1:dim(segment_matrix)[1],1,1:2]
     p2 <- segment_matrix[1:dim(segment_matrix)[1],2,1:2]
     segment_node_df<- data.frame(unique(rbind(p1,p2)))
     names(segment_node_df) <- c("X", "Y")
-    segment_node_df$id <- as.numeric(row.names(segment_node_df))
+    segment_node_df$id <- 1:nrow(segment_node_df)
  
-    network_adj_matrix <- get_adjacency_matrix(segment_matrix, segment_node_df)
-    network <- graph.adjacency(network_adj_matrix, mode="undirected")
+    network <- get_undirected_graph(segment_matrix, segment_node_df, fids)
+
+    # ensure that segment_node_df is aligned with graph vertices
+    stopifnot(segment_node_df$X==V(network)$X & segment_node_df$Y==V(network)$Y)
+
     #vid and vertex index match. add explicit vid field to track
     #NOTE:  This vid field is NOT required outside this function
     #       It's only used for accounting between vertices and
@@ -170,7 +219,7 @@ create_graph <- function(metrics_df, segment_matrix, proj4string="+proj=longlat 
     metrics_df$vid <- -(1:nrow(metrics_df))
     vertex_df <- get.data.frame(network, what=c("vertices"))
     # first get the x,y's to join via
-    vertex_df <- merge(vertex_df, segment_node_df, by.x="vid", by.y="id")
+    # vertex_df <- merge(vertex_df, segment_node_df, by.x="vid", by.y="id")
     # join to metrics_df and keep all values from both (so we'll retain "off-grid" nodes too)
     vertex_df <- merge(vertex_df, metrics_df, by.x=c("X","Y"), by.y=c("X","Y"), all=TRUE)
     # vertex_df should be same size or bigger than metrics_df
