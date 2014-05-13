@@ -172,7 +172,7 @@ test_that("sequence_plan_far works", {
 
     # check whether sum_d_pop by sequence matches 
     # sorted sum_d_pop
-    sum_pop_by_seq <- V(np@network)[V(np@network)$sequence]$sum_pop
+    sum_pop_by_seq <- V(np@network)[V(np@network)$far.sighted.sequence]$sum_pop
     sum_pop_desc <- sort(V(np@network)$sum_pop, decreasing=TRUE)
     expect_equal(sum(sum_pop_by_seq==sum_pop_desc), 5)
 })
@@ -194,8 +194,13 @@ test_that("reading and sequencing scenario 108 works", {
     # check whether sum_d_pop by sequence matches 
     # sorted sum_d_pop
     vert_df <- get.data.frame(np@network, what="vertices")
+    # remove vertices that are NOT connected to network
+    edge_df <- get.data.frame(np@network, what="edges")
+    edge_verts <- c(edge_df$from, edge_df$to)
+    vert_df <- vert_df[1:nrow(vert_df) %in% edge_verts,]
+    # filter out fake nodes
     real_vert_df <- subset(vert_df, subset=!is_fake)
-    sorted_df <- real_vert_df[with(real_vert_df, order(sequence)),]
+    sorted_df <- real_vert_df[with(real_vert_df, order(far.sighted.sequence)),]
     sum_pop_by_seq <- sorted_df$sum_pop
     sum_pop_desc <- sort(real_vert_df$sum_pop, decreasing=TRUE)
     expect_equal(sum(sum_pop_by_seq==sum_pop_desc), nrow(real_vert_df))

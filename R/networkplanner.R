@@ -38,7 +38,7 @@ setClass("NetworkPlan", representation(network="igraph", proj="character"))
 #' @param np_url URL of the network planner instance to download scenario from. By default,
 #'        it is http://networkplanner.modilabs.org.
 #' @export
-download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
+download_scenario <- function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
     
     ## TODO: Figure out how to handle case that user didnt give login info 
@@ -101,13 +101,36 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     file.remove("tmp.zip")
 }
 
+#' re-assign fields from one undirected graph to another directed graph 
+#' via edge dataframes and a vertex mapping.  
+#' 
+#' @param vertex_id_map maps the original graph vertex ids to the new graph 
+#' @param orig_edge_df the original graph edge dataframe
+#' @param field to be reassigned
+#' @return An edge dataframe with from/to fields corresponding to edges in the
+#'         graph to be updated along with the fields to be added (can be used
+#'         via the igraph index operator to reassign fields to the igraph)
+reassignment_edge_df <- function(vertex_id_map, orig_edge_df, field) {
+    orig_edge_df$new_from <- vertex_id_map[orig_edge_df$from]
+    orig_edge_df$new_to <- vertex_id_map[orig_edge_df$to]
+    # need to do both sides because original was undirected
+    from_to_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_from, to=orig_edge_df$new_to]),]
+    to_from_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_to, to=orig_edge_df$new_from]),]
+    new_edge_df <- data.frame(
+                    from=c(from_to_orig_edge_df$new_from, to_from_orig_edge_df$new_to), 
+                    to=c(from_to_orig_edge_df$new_to, to_from_orig_edge_df$new_from))
+    new_edge_df[,field] <- c(from_to_orig_edge_df[,field], to_from_orig_edge_df[,field])
+    new_edge_df
+}
+    
+
 #' Read network plan from a directory in the filesystem
 #' 
 #' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
 #' @param debug if TRUE, will verify inputs and run failsafes
 #' @return A NetworkPlan object
 #' @export
-read_networkplan = function(directory_name, debug=F) {
+read_networkplan <- function(directory_name, debug=F) {
     base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # read nodes and assign id
@@ -118,7 +141,6 @@ read_networkplan = function(directory_name, debug=F) {
     
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
-    # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
      
     segments_fids <- decompose_spatial_lines(network_shp)
     network <- create_graph(metrics_df, segments_fids$segments, segments_fids$fids) 
@@ -143,22 +165,14 @@ read_networkplan = function(directory_name, debug=F) {
     # they get lost within the dominator.tree calls in create_directed_trees)
     network <- assign_distances(network, proj4string)
    
-    # Re-assign the FIDS (need to do both sides because original was undirected)
+    # Re-assign the FIDS 
     # need to map original vertex ids to new ones
     orig_new_v_map <- order(V(network)$orig_v_id)
-    orig_edge_df$new_from <- orig_new_v_map[orig_edge_df$from]
-    orig_edge_df$new_to <- orig_new_v_map[orig_edge_df$to]
-    from_to_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_from, to=orig_edge_df$new_to]),]
-    to_from_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_to, to=orig_edge_df$new_from]),]
-    new_edge_df <- data.frame(
-                    from=c(from_to_orig_edge_df$new_from, to_from_orig_edge_df$new_to), 
-                    to=c(from_to_orig_edge_df$new_to, to_from_orig_edge_df$new_from), 
-                    FID=c(from_to_orig_edge_df$FID, to_from_orig_edge_df$FID))
-
-    network[from=new_edge_df$from, to=new_edge_df$to, attr="FID"] <- new_edge_df$FID
-    # network[from=from_to_orig_edge_df$new_from, to=from_to_orig_edge_df$new_to, attr="FID"] <- from_to_orig_edge_df$FID
-    # network[from=to_from_orig_edge_df$new_to, to=to_from_orig_edge_df$new_from, attr="FID"] <- to_from_orig_edge_df$FID
+    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, "FID")
     
+    # use igraph indexing to assign FID back to directed igraph
+    network[from=new_edge_df$from, to=new_edge_df$to, attr="FID"] <- new_edge_df$FID
+   
     # Remove temp vertex attributes
     network <- remove.vertex.attribute(network, "orig_v_id") 
 
@@ -203,12 +217,16 @@ setGeneric("sequence_plan", function(np, selector=default_selector) standardGene
 setMethod("sequence_plan", signature(np="NetworkPlan"), 
     function(np, selector=default_selector) {
 
+        nodes <- get.data.frame(np@network, what="vertices")
+        edges <- get.data.frame(np@network, what="edges")
         # start from nodes where is_root==TRUE since we don't want to
         # sequence "fake" nodes 
-        roots <- as.numeric(V(np@network)[V(np@network)$is_root])
-        frontier <- roots
+        roots <- as.integer(V(np@network)[V(np@network)$is_root])
+        # eliminate the roots that are not part of the network by
+        # looking them up in the verts of the edges of the graph
+        all_edge_vertices <- c(edges$from, edges$to)
+        frontier <- roots[roots %in% all_edge_vertices]
         # get.data.frame returns vertices ordered by vertex id
-        nodes <- get.data.frame(np@network, what="vertices")
         # setup node dataframe with vid (vertex id) field
         # for backrefs
         nodes$vid <- 1:nrow(nodes)
@@ -236,8 +254,11 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
         }
 
         # now apply the sequence back
-        # only apply to "real" nodes
-        num_real_nodes <- length(V(np@network)[!V(np@network)$is_fake])
+        # only apply to "real" nodes that are ON the network
+        real_nodes <- as.integer(V(np@network)[!V(np@network)$is_fake])
+        real_nodes_with_edges <- real_nodes[real_nodes %in% all_edge_vertices]
+        num_real_nodes <- length(real_nodes_with_edges)
+
         stopifnot(length(node_sequence)==num_real_nodes)
         V(np@network)[node_sequence]$far.sighted.sequence <- 1:num_real_nodes
         np

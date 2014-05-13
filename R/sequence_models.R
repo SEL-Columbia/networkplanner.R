@@ -3,7 +3,7 @@
 #' \code{sequence_plan_far} function
 #' 
 #' @seealso \code{\link{sequence_plan_far}}
-#' @todo incorporate validation check to determine whether model
+#' TODO:  incorporate validation check to determine whether model
 #'       will work with plan (i.e. does it have the right attributes)
 
 # A simple model computing downstream population and
@@ -64,6 +64,7 @@ mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) {
                root=root_vertex,
                Upstream.FID=edge_fields$FID) 
 }
+
 #' @export
 mv_v_dmd_select_min <- function(df) {
     subset(df, subset=(min(df$Total.Distance.per.Demand) == df$Total.Distance.per.Demand))

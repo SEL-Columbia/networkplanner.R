@@ -240,7 +240,6 @@ create_graph <- function(metrics_df, segment_matrix, fids, proj4string="+proj=lo
     
     edge_df <- get.data.frame(network, what="edges")
     
-    #TODO:  do we want directed/undirected here?
     network <- graph.data.frame(edge_df, directed=FALSE, vertex_df)
     
     #reset names to be consistent with vertex indices
@@ -381,6 +380,8 @@ get_edge_spldf <- function(np){
                                      data=data.frame(edge_id=edges[,"edge_id"]))
     # merge didn't want to return a SpatialLinesDataFrame without the sp namespace prefix
     line_df <- sp::merge(line_df, edge_df, by="edge_id")
+    # drop the edge_id column (only needed for the join above)
+    line_df@data <- line_df@data[,!names(line_df@data) %in% c("edge_id")]
     return(line_df)
 }    
 
