@@ -15,12 +15,6 @@ setOldClass("igraph")
 
 # The NetworkPlan object
 setClass("NetworkPlan", representation(network="igraph", proj="character"))
-# Handle case with an existing_network as a subclass for now 
-# There's probably a better way to handle it, but without this R complains
-# about the existing_network slot being empty if there's nothing there
-# setClass("NetworkPlanEx", representation(existing_network="SpatialLinesDataFrame"),
-#                                        contains="NetworkPlan")
-
 
 #' Download scenario from networkplanner into the given directory
 #'
