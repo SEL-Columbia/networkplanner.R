@@ -13,12 +13,14 @@ proj4str <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
 
 # High-level "expect" function, can be used to check the structure of any NetworkPlan
 expect_NetworkPlan_structure <- function(np) {
-    expect_equal(class(np), "NetworkPlan")
-    expect_equal(class(np@network), "igraph")
-    expect_equal(class(np@nodes), "SpatialPointsDataFrame")
-    expect_equal(class(np@existing_network), "SpatialLinesDataFrame")
-    expect_that("id" %in% names(np@nodes))
-    expect_that("is_root" %in% names(np@nodes))
+    expect_true(class(np)=="NetworkPlan")
+    expect_true(class(np@network)=="igraph")
+    if(length(V(np@network))) {
+        v_attrs <- list.vertex.attributes(np@network)
+        required_attrs <- c("Sequence..Is.root", 
+                            "Sequence..Is.fake")
+        expect_true(sum(v_attrs %in% required_attrs)==length(required_attrs))
+    }
 }
 
 # temp workaround for creating distance pairs from points
@@ -51,18 +53,18 @@ sample_NetworkPlan <- function() {
     dir_mst <- dir_mst_dom$domtree
 
     roots <- as.numeric(V(dir_mst)[degree(dir_mst, mode="in")==0])
-    V(dir_mst)$is_root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
-    V(dir_mst)$is_fake <- FALSE
+    V(dir_mst)$Sequence..Is.root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
+    V(dir_mst)$Sequence..Is.fake <- FALSE
 
     # There's no existing_network in this plan
     list(nodes=sp_df, np=new("NetworkPlan", network=dir_mst))
 }
      
     
-test_that("reading network plan 174 creates a basically valid NetworkPlan", {
-    test_scenario_174_dir <- str_c(test_data_dir, 'Indo_174_Settlements')
-    # test_scenario_174 <- read_networkplan(test_scenario_dir)
-    # expect_NetworkPlan_structure(test_scenario_174)
+test_that("reading network plan 108 creates a basically valid NetworkPlan", {
+    test_scenario_dir <- str_c(test_data_dir, '108')
+    test_scenario_108 <- read_networkplan(test_scenario_dir)
+    expect_NetworkPlan_structure(test_scenario_108)
 })
 
 
@@ -118,8 +120,8 @@ simple_NetworkPlan <- function() {
     V(dir_network)$Y <- coord_df$Y
 
     roots <- as.numeric(V(dir_network)[degree(dir_network, mode="in")==0])
-    V(dir_network)$is_root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
-    V(dir_network)$is_fake <- FALSE
+    V(dir_network)$Sequence..Is.root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
+    V(dir_network)$Sequence..Is.fake <- FALSE
 
     new("NetworkPlan", network=dir_network)
 }
@@ -172,7 +174,7 @@ test_that("sequence_plan_far works", {
 
     # check whether sum_d_pop by sequence matches 
     # sorted sum_d_pop
-    sum_pop_by_seq <- V(np@network)[V(np@network)$far.sighted.sequence]$sum_pop
+    sum_pop_by_seq <- V(np@network)[V(np@network)$Sequence..Far.sighted.sequence]$sum_pop
     sum_pop_desc <- sort(V(np@network)$sum_pop, decreasing=TRUE)
     expect_equal(sum(sum_pop_by_seq==sum_pop_desc), 5)
 })
@@ -199,8 +201,8 @@ test_that("reading and sequencing scenario 108 works", {
     edge_verts <- c(edge_df$from, edge_df$to)
     vert_df <- vert_df[1:nrow(vert_df) %in% edge_verts,]
     # filter out fake nodes
-    real_vert_df <- subset(vert_df, subset=!is_fake)
-    sorted_df <- real_vert_df[with(real_vert_df, order(far.sighted.sequence)),]
+    real_vert_df <- subset(vert_df, subset=!Sequence..Is.fake)
+    sorted_df <- real_vert_df[with(real_vert_df, order(Sequence..Far.sighted.sequence)),]
     sum_pop_by_seq <- sorted_df$sum_pop
     sum_pop_desc <- sort(real_vert_df$sum_pop, decreasing=TRUE)
     expect_equal(sum(sum_pop_by_seq==sum_pop_desc), nrow(real_vert_df))

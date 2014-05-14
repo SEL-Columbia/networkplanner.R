@@ -55,19 +55,23 @@ mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) {
     } 
 
     # These are the fields added to each node representing cumulative
-    # downstream values of interest
-    data.frame(Distance=distance,
-               Distance.per.Demand=mv_v_dmd,
-               Total.Downstream.Network.Extent.m=sum_distance,
-               Total.Downstream.Demand.kWh=sum_dmd_yr,
-               Total.Distance.per.Demand=sum_mv_v_dmd,
-               root=root_vertex,
-               Upstream.FID=edge_fields$FID) 
+    # downstream values of interest and other useful info
+    data.frame(Sequence..Upstream.distance=distance,
+               Sequence..Distance.m.per.demand.kwh=mv_v_dmd,
+               Sequence..Downstream.network.extent.m=sum_distance,
+               Sequence..Downstream.demand.kwh=sum_dmd_yr,
+               Sequence..Downstream.distance.m.per.downstream.demand.kwh=sum_mv_v_dmd,
+               Sequence..Vertex.id=vid,
+               Sequence..Root.vertex.id=root_vertex,
+               Sequence..Upstream.fid=edge_fields$FID) 
 }
 
 #' @export
 mv_v_dmd_select_min <- function(df) {
-    subset(df, subset=(min(df$Total.Distance.per.Demand) == df$Total.Distance.per.Demand))
+    subset(df, 
+      subset=
+       (min(df$Sequence..Downstream.distance.m.per.downstream.demand.kwh) == 
+            df$Sequence..Downstream.distance.m.per.downstream.demand.kwh))
 }
 #' @export
 mv_v_dmd_sequence_model <- list(accumulator=mv_v_dmd_accumulate,

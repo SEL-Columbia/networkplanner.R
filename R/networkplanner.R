@@ -150,7 +150,6 @@ read_networkplan <- function(directory_name, debug=F) {
     orig_edge_df <- get.data.frame(network, what="edges")
     V(network)$orig_v_id <- 1:length(V(network))
     
-
     # Now create directed graph from "fake" nodes (for trees connected
     # to the existing network) and "roots" (for trees that are NOT connected)
     # TODO:  Needs testing
@@ -170,11 +169,19 @@ read_networkplan <- function(directory_name, debug=F) {
     orig_new_v_map <- order(V(network)$orig_v_id)
     new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, "FID")
     
+    # assign "Sequence" attributes
     # use igraph indexing to assign FID back to directed igraph
     network[from=new_edge_df$from, to=new_edge_df$to, attr="FID"] <- new_edge_df$FID
+    V(network)$Sequence..Is.root <- V(network)$is_root 
+    V(network)$Sequence..Is.fake <- V(network)$is_fake
    
     # Remove temp vertex attributes
     network <- remove.vertex.attribute(network, "orig_v_id") 
+    network <- remove.vertex.attribute(network, "is_root") 
+    network <- remove.vertex.attribute(network, "is_fake") 
+    # NOTE:  The nid attribute is added in create_graph and used in 
+    # create_directed_trees.  
+    network <- remove.vertex.attribute(network, "nid") 
 
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
     new("NetworkPlan", network=network, proj=proj4string)
@@ -219,9 +226,9 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
 
         nodes <- get.data.frame(np@network, what="vertices")
         edges <- get.data.frame(np@network, what="edges")
-        # start from nodes where is_root==TRUE since we don't want to
+        # start from nodes where Sequence..Is.root==TRUE since we don't want to
         # sequence "fake" nodes 
-        roots <- as.integer(V(np@network)[V(np@network)$is_root])
+        roots <- as.integer(V(np@network)[V(np@network)$Sequence..Is.root])
         # eliminate the roots that are not part of the network by
         # looking them up in the verts of the edges of the graph
         all_edge_vertices <- c(edges$from, edges$to)
@@ -255,12 +262,12 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
 
         # now apply the sequence back
         # only apply to "real" nodes that are ON the network
-        real_nodes <- as.integer(V(np@network)[!V(np@network)$is_fake])
+        real_nodes <- as.integer(V(np@network)[!V(np@network)$Sequence..Is.fake])
         real_nodes_with_edges <- real_nodes[real_nodes %in% all_edge_vertices]
         num_real_nodes <- length(real_nodes_with_edges)
 
         stopifnot(length(node_sequence)==num_real_nodes)
-        V(np@network)[node_sequence]$far.sighted.sequence <- 1:num_real_nodes
+        V(np@network)[node_sequence]$Sequence..Far.sighted.sequence <- 1:num_real_nodes
         np
     }
 )
@@ -287,7 +294,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 
         # we want to exclude any "fake" nodes (i.e. those nodes that
         # do not have the same attributes as others) if any
-        real_nodes <- subset(nodes, !nodes$is_fake) 
+        real_nodes <- subset(nodes, !nodes$Sequence..Is.fake) 
  
         #inner function to "unravel" the dataframe before passing to the accumulator  
         apply_to_down_nodes <- function(df) { 
@@ -348,7 +355,7 @@ write.NetworkPlan = function(np, directory_name,
     # subsetting node_df according to includeFake
     node_df <- get.data.frame(np@network, what="vertices")
     if (includeFake == FALSE){
-        output_df <- subset(node_df, !is_fake)
+        output_df <- subset(node_df, !Sequence..Is.fake)
     }
     
     # getting edge SPLDF from NP object
@@ -404,7 +411,7 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"
         
         #now add sequence number to edges
         real_nodes <- which(degree(np@network, mode="in")!=0)
-        E(np@network)[ to(real_nodes) ]$far.sighted.sequence <- V(np@network)[real_nodes]$far.sighted.sequence
+        E(np@network)[ to(real_nodes) ]$Sequence..Far.sighted.sequence <- V(np@network)[real_nodes]$Sequence..Far.sighted.sequence
         np
     }
 )
