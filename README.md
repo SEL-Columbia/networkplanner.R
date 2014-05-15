@@ -43,7 +43,7 @@ plot(np@network, vertex.size=4, edge.arrow.size=1, vertex.label=vertex_labels)
 ```
 
 And the plot
-![Sample Plot](SEL-Columbia.github.com/networkplanner.r/img/sample_plot.png)
+![Sample Plot](http://sel-columbia.github.com/networkplanner.r/img/sample_plot.png)
 
 Detailed Overview
 ---
@@ -101,14 +101,3 @@ function.  This outputs the nodes as a csv and segments as a shapefile.  You
 can also download a scenario and all its files for analysis via the 
 `download_scenario` function.   
 
-Usage Example
----
-```
-# assumes networkplanner directory is on local machine
-base_dir <- "C:/Users/Downloads/2940"
-np <- read_networkplan(base_dir)
-# sequence the plan
-np_sequenced <- sequence_plan_far(np, sequence_model=mv_v_dmd_sequence_model)
-# write sequenced networkplan to a directory 
-write.NetworkPlan(np_sequenced, base_dir)
-```
