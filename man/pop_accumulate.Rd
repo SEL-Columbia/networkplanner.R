@@ -12,6 +12,8 @@ sequence selector functions for use with the
 NetworkPlanner.R \code{sequence_plan_far} function
 }
 \seealso{
-\code{\link{sequence_plan_far}}
+\code{\link{sequence_plan_far}} TODO: incorporate
+validation check to determine whether model will work with
+plan (i.e. does it have the right attributes)
 }
 

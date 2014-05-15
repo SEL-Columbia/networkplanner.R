@@ -15,12 +15,6 @@ setOldClass("igraph")
 
 # The NetworkPlan object
 setClass("NetworkPlan", representation(network="igraph", proj="character"))
-# Handle case with an existing_network as a subclass for now 
-# There's probably a better way to handle it, but without this R complains
-# about the existing_network slot being empty if there's nothing there
-# setClass("NetworkPlanEx", representation(existing_network="SpatialLinesDataFrame"),
-#                                        contains="NetworkPlan")
-
 
 #' Download scenario from networkplanner into the given directory
 #'
@@ -38,7 +32,7 @@ setClass("NetworkPlan", representation(network="igraph", proj="character"))
 #' @param np_url URL of the network planner instance to download scenario from. By default,
 #'        it is http://networkplanner.modilabs.org.
 #' @export
-download_scenario = function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
+download_scenario <- function(scenario_number, directory_name=NULL, username=NULL, password=NULL,
                              np_url='http://networkplanner.modilabs.org/') {
     
     ## TODO: Figure out how to handle case that user didnt give login info 
@@ -47,7 +41,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
 
     
     # In condition that user didn't give directory_name
-    # Use working dirercory of R seesion and Scenario number
+    # Use working directory of R session and Scenario number
     # as the folder to save data 
     if (is.null(directory_name)){
         directory_name <- getwd()
@@ -65,7 +59,7 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
                 and leave user and password blank if it is PUBLIC scenario")
     }
     
-    # reconscructing url for the zip file
+    # reconstructing url for the zip file
     scenario_addr <- paste("scenarios", 
                            paste(scenario_number, "zip", sep="."), sep="/")
     full_url <- paste(np_url, scenario_addr, sep="")
@@ -101,13 +95,36 @@ download_scenario = function(scenario_number, directory_name=NULL, username=NULL
     file.remove("tmp.zip")
 }
 
+#' re-assign fields from one undirected graph to another directed graph 
+#' via edge dataframes and a vertex mapping.  
+#' 
+#' @param vertex_id_map maps the original graph vertex ids to the new graph 
+#' @param orig_edge_df the original graph edge dataframe
+#' @param field to be reassigned
+#' @return An edge dataframe with from/to fields corresponding to edges in the
+#'         graph to be updated along with the fields to be added (can be used
+#'         via the igraph index operator to reassign fields to the igraph)
+reassignment_edge_df <- function(vertex_id_map, orig_edge_df, field) {
+    orig_edge_df$new_from <- vertex_id_map[orig_edge_df$from]
+    orig_edge_df$new_to <- vertex_id_map[orig_edge_df$to]
+    # need to do both sides because original was undirected
+    from_to_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_from, to=orig_edge_df$new_to]),]
+    to_from_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_to, to=orig_edge_df$new_from]),]
+    new_edge_df <- data.frame(
+                    from=c(from_to_orig_edge_df$new_from, to_from_orig_edge_df$new_to), 
+                    to=c(from_to_orig_edge_df$new_to, to_from_orig_edge_df$new_from))
+    new_edge_df[,field] <- c(from_to_orig_edge_df[,field], to_from_orig_edge_df[,field])
+    new_edge_df
+}
+    
+
 #' Read network plan from a directory in the filesystem
 #' 
 #' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
 #' @param debug if TRUE, will verify inputs and run failsafes
 #' @return A NetworkPlan object
 #' @export
-read_networkplan = function(directory_name, debug=F) {
+read_networkplan <- function(directory_name, debug=F) {
     base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # read nodes and assign id
@@ -118,18 +135,22 @@ read_networkplan = function(directory_name, debug=F) {
     
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
-    # TODO: re-project metrics_csv and network_shp to same PROJ? (which one?)
      
-    segment_matrix <- get_segment_matrix(network_shp)
-    network <- create_graph(metrics_df, segment_matrix) 
+    segments_fids <- decompose_spatial_lines(network_shp)
+    network <- create_graph(metrics_df, segments_fids$segments, segments_fids$fids) 
 
+    # Keep original edges which have the FID and set the original vertex id
+    # so that we can merge back once the directed trees have been created
+    orig_edge_df <- get.data.frame(network, what="edges")
+    V(network)$orig_v_id <- 1:length(V(network))
+    
     # Now create directed graph from "fake" nodes (for trees connected
     # to the existing network) and "roots" (for trees that are NOT connected)
     # TODO:  Needs testing
     # root selector selects 
     subnet_root_selector <- function(g) {
         demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
-        root_vid <- which(demands==max(demands))[1]
+        root_index <- which(demands==max(demands))[1]
     }
     network <- create_directed_trees(network, root_selector=subnet_root_selector)
     
@@ -137,6 +158,25 @@ read_networkplan = function(directory_name, debug=F) {
     # they get lost within the dominator.tree calls in create_directed_trees)
     network <- assign_distances(network, proj4string)
    
+    # Re-assign the FIDS 
+    # need to map original vertex ids to new ones
+    orig_new_v_map <- order(V(network)$orig_v_id)
+    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, "FID")
+    
+    # assign "Sequence" attributes
+    # use igraph indexing to assign FID back to directed igraph
+    network[from=new_edge_df$from, to=new_edge_df$to, attr="FID"] <- new_edge_df$FID
+    V(network)$Sequence..Is.root <- V(network)$is_root 
+    V(network)$Sequence..Is.fake <- V(network)$is_fake
+   
+    # Remove temp vertex attributes
+    network <- remove.vertex.attribute(network, "orig_v_id") 
+    network <- remove.vertex.attribute(network, "is_root") 
+    network <- remove.vertex.attribute(network, "is_fake") 
+    # NOTE:  The nid attribute is added in create_graph and used in 
+    # create_directed_trees.  
+    network <- remove.vertex.attribute(network, "nid") 
+
     ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
     new("NetworkPlan", network=network, proj=proj4string)
 }
@@ -178,12 +218,16 @@ setGeneric("sequence_plan", function(np, selector=default_selector) standardGene
 setMethod("sequence_plan", signature(np="NetworkPlan"), 
     function(np, selector=default_selector) {
 
-        # start from nodes where is_root==TRUE since we don't want to
-        # sequence "fake" nodes 
-        roots <- as.numeric(V(np@network)[V(np@network)$is_root])
-        frontier <- roots
-        # get.data.frame returns vertices ordered by vertex id
         nodes <- get.data.frame(np@network, what="vertices")
+        edges <- get.data.frame(np@network, what="edges")
+        # start from nodes where Sequence..Is.root==TRUE since we don't want to
+        # sequence "fake" nodes 
+        roots <- as.integer(V(np@network)[V(np@network)$Sequence..Is.root])
+        # eliminate the roots that are not part of the network by
+        # looking them up in the verts of the edges of the graph
+        all_edge_vertices <- c(edges$from, edges$to)
+        frontier <- roots[roots %in% all_edge_vertices]
+        # get.data.frame returns vertices ordered by vertex id
         # setup node dataframe with vid (vertex id) field
         # for backrefs
         nodes$vid <- 1:nrow(nodes)
@@ -211,10 +255,13 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
         }
 
         # now apply the sequence back
-        # only apply to "real" nodes
-        num_real_nodes <- length(V(np@network)[!V(np@network)$is_fake])
+        # only apply to "real" nodes that are ON the network
+        real_nodes <- as.integer(V(np@network)[!V(np@network)$Sequence..Is.fake])
+        real_nodes_with_edges <- real_nodes[real_nodes %in% all_edge_vertices]
+        num_real_nodes <- length(real_nodes_with_edges)
+
         stopifnot(length(node_sequence)==num_real_nodes)
-        V(np@network)[node_sequence]$sequence <- 1:num_real_nodes
+        V(np@network)[node_sequence]$Sequence..Far.sighted.sequence <- 1:num_real_nodes
         np
     }
 )
@@ -241,7 +288,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 
         # we want to exclude any "fake" nodes (i.e. those nodes that
         # do not have the same attributes as others) if any
-        real_nodes <- subset(nodes, !nodes$is_fake) 
+        real_nodes <- subset(nodes, !nodes$Sequence..Is.fake) 
  
         #inner function to "unravel" the dataframe before passing to the accumulator  
         apply_to_down_nodes <- function(df) { 
@@ -260,17 +307,18 @@ setMethod("accumulate", signature(np="NetworkPlan"),
         new_nodes <- merge(nodes, result_nodes, by.x="vid", by.y="vid", all.x=TRUE)
 
         # join to upstream edges
-        new_edges <- merge(edges, result_nodes, by.x="to", by.y="vid", all.x=TRUE)
+        # Let's NOT do this...user can join nodes to upstream edges via Upstream.FID later on
+        # new_edges <- merge(edges, result_nodes, by.x="to", by.y="vid", all.x=TRUE)
+
+        # reorder the edge names (graph.data.frame needs from, to in 1st 2 cols)
+        # edge_names <- c(c("from", "to"), setdiff(names(new_edges), c("from", "to")))
+        # new_edges <- new_edges[,edge_names]
 
         # reorder the vertex names (graph.data.frame needs vertex id in 1st col)
         vertex_names <- c(c("vid"), setdiff(names(new_nodes), c("vid")))
         new_vertices <- new_nodes[,vertex_names]
 
-        # reorder the edge names (graph.data.frame needs from, to in 1st 2 cols)
-        edge_names <- c(c("from", "to"), setdiff(names(new_edges), c("from", "to")))
-        new_edges <- new_edges[,edge_names]
-
-        g <- graph.data.frame(new_edges, directed=TRUE, new_vertices)
+        g <- graph.data.frame(edges, directed=TRUE, new_vertices)
         # get rid of the name attribute as this leads to confusion
         g <- remove.vertex.attribute(g, "name")
 
@@ -301,7 +349,7 @@ write.NetworkPlan = function(np, directory_name,
     # subsetting node_df according to includeFake
     node_df <- get.data.frame(np@network, what="vertices")
     if (includeFake == FALSE){
-        output_df <- subset(node_df, !is_fake)
+        output_df <- subset(node_df, !Sequence..Is.fake)
     }
     
     # getting edge SPLDF from NP object
@@ -357,7 +405,7 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"
         
         #now add sequence number to edges
         real_nodes <- which(degree(np@network, mode="in")!=0)
-        E(np@network)[ to(real_nodes) ]$sequence <- V(np@network)[real_nodes]$sequence
+        E(np@network)[ to(real_nodes) ]$Sequence..Far.sighted.sequence <- V(np@network)[real_nodes]$Sequence..Far.sighted.sequence
         np
     }
 )
