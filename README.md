@@ -43,6 +43,7 @@ plot(np@network, vertex.size=4, edge.arrow.size=1, vertex.label=vertex_labels)
 ```
 
 And the plot
+![Sample Plot](SEL-Columbia.github.com/networkplanner.r/img/sample_plot.png)
 
 Detailed Overview
 ---
