@@ -57,16 +57,16 @@ Field Definitions
 The following are standard fields that are added to a NetworkPlan upon
 creation:  
 
-Vertex Attributes:  
+- Vertex Attributes:  
   `Sequence..Is.root`:  Whether this vertex is a "Sequence root"
   `Sequence..Is.fake`:  Whether this vertex is a "Fake" node
 
-Edge Attributes:
+- Edge Attributes:
   `FID`:  The FID of the corresponding record in the original existing network 
 shapefile
   `distance`:  The distance (in meters) between vertices that this edge spans
 
-Sequenced NetworkPlan Vertex Attributes:
+- Sequenced NetworkPlan Vertex Attributes:
   `Sequence..Far.sighted.sequence`:  The sequence associated with this vertex 
 calculated in a "far sighted" manner.  
 
