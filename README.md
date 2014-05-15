@@ -45,6 +45,11 @@ plot(np@network, vertex.size=4, edge.arrow.size=1, vertex.label=vertex_labels)
 And the plot
 ![Sample Plot](http://sel-columbia.github.io/networkplanner.R/img/sample_plot.png)
 
+Notice how the "Sequence roots" in red are not necessarily the roots of their
+respective tree/subnetwork.  This is the case when that subnetwork has a "Fake"
+root which models the closest connection to an existing grid and is NOT a
+settlement node.  
+
 Detailed Overview
 ---
 
@@ -71,8 +76,10 @@ trees:
   (i.e. have no "Fake" vertex), a root is selected which represents the
   node with maximal demand (we may make this customizable going forward)
 
-Root vertices can be found via `V(network)[V(network)$Sequence..Is.root]`
-
+"Sequence root" vertices can be found via `V(network)[V(network)$Sequence..Is.root]`
+These are not necessarily the same as the roots of a tree/subnetwork since 
+"Fake" vertices are not considered true roots for sequencing purposes as
+there is no settlement associated with a "Fake" vertex.
 
 To create a "Far Sighted Sequence" of the vertices in a NetworkPlan, you can
 call `sequence_plan_far(np, sequence_model=mv_v_dmd_sequence_model)`.  This
