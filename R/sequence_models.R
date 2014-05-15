@@ -56,8 +56,8 @@ mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) {
 
     # These are the fields added to each node representing cumulative
     # downstream values of interest and other useful info
-    data.frame(Sequence..Upstream.distance=distance,
-               Sequence..Distance.m.per.demand.kwh=mv_v_dmd,
+    data.frame(Sequence..Upstream.distance.m=distance,
+               Sequence..Upstream.distance.m.per.demand.kwh=mv_v_dmd,
                Sequence..Downstream.network.extent.m=sum_distance,
                Sequence..Downstream.demand.kwh=sum_dmd_yr,
                Sequence..Downstream.distance.m.per.downstream.demand.kwh=sum_mv_v_dmd,

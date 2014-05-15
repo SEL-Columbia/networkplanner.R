@@ -35,6 +35,7 @@ write.NetworkPlan(np, base_dir)
 ```
 Sample plotting code
 ```
+# assumes np is a sequenced NetworkPlan object
 # Setup graph for plotting by coloring roots red and labeling
 # vertices by their Far.sighted.sequence value
 V(np@network)[V(np@network)$Sequence..Is.root]$color <- "red"
@@ -49,6 +50,35 @@ Notice how the "Sequence roots" in red are not necessarily the roots of their
 respective tree/subnetwork.  This is the case when that subnetwork has a "Fake"
 root which models the closest connection to an existing grid and is NOT a
 settlement node.  
+
+Field Definitions
+---
+
+The following are standard fields that are added to a NetworkPlan upon
+creation:  
+
+Vertex Attributes:  
+`Sequence..Is.root`:  Whether this vertex is a "Sequence root"
+`Sequence..Is.fake`:  Whether this vertex is a "Fake" node
+
+Edge Attributes:
+`FID`:  The FID of the corresponding record in the original existing network 
+shapefile
+`distance`:  The distance (in meters) between vertices that this edge spans
+
+Sequenced NetworkPlan Vertex Attributes:
+`Sequence..Far.sighted.sequence`:  The sequence associated with this vertex 
+calculated in a "far sighted" manner.  
+
+Custom model fields will vary with the model.  A convention is to prefix
+the attribute name with "Sequence".  If this is followed, some sample code
+to list these new attributes is:
+
+```
+# assumes np is a sequenced NetworkPlan object
+vatts <- list.vertex.attributes(np@network) 
+vatts[grep("Sequence", vatts)]
+```
 
 Detailed Overview
 ---
