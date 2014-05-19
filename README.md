@@ -19,6 +19,9 @@ Usage Example
 Build and sequence NetworkPlan
 
 ```
+#Load the library first for custom functions
+library(networkplanner)
+
 # Set the directory containing the output of a Network Planner
 # scenario.  Assumes networkplanner directory is on local machine
 base_dir <- "C:/Users/Downloads/2940"
