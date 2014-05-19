@@ -104,7 +104,7 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
 #' @return An edge dataframe with from/to fields corresponding to edges in the
 #'         graph to be updated along with the fields to be added (can be used
 #'         via the igraph index operator to reassign fields to the igraph)
-reassignment_edge_df <- function(vertex_id_map, orig_edge_df, field) {
+reassignment_edge_df <- function(vertex_id_map, orig_edge_df, network, field) {
     orig_edge_df$new_from <- vertex_id_map[orig_edge_df$from]
     orig_edge_df$new_to <- vertex_id_map[orig_edge_df$to]
     # need to do both sides because original was undirected
@@ -161,7 +161,7 @@ read_networkplan <- function(directory_name, debug=F) {
     # Re-assign the FIDS 
     # need to map original vertex ids to new ones
     orig_new_v_map <- order(V(network)$orig_v_id)
-    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, "FID")
+    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, network, "FID")
     
     # assign "Sequence" attributes
     # use igraph indexing to assign FID back to directed igraph
