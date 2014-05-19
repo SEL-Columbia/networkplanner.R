@@ -13,6 +13,7 @@ library(devtools)
 install_github("SEL-Columbia/networkplanner.R")
 ```
 Windows Users: If you are using a PC, you MUST install Rtools from CRAN, otherwise non-cran packages wont install properly.  Find a free copy of Rtools.exe appropriate for your system below:
+
 <http://cran.r-project.org/bin/windows/Rtools/>
 
 Usage Example
