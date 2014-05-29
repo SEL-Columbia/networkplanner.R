@@ -385,6 +385,52 @@ get_edge_spldf <- function(np){
     return(line_df)
 }    
 
+# Eliminate edges from paths connecting "fake nodes" to preserve the invariant that
+# trees from fake nodes are disjoint
+# Assumes network is not directed and vertices have nid attribute (to find fake nodes via)
+# returns network of disjoint trees rooted at fake nodes
+remove_paths_between_fakes <- function(network) {
+
+    # TODO:  Fill this in (it's only stubbed right now)
+    # get the fake nodes
+    fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
+
+    # create all vertex pairs that we need to check for paths
+    set_of_pairs <- cset(apply(combn(fake_vids, 2), 2, as.tuple))
+
+    # check pairs for shortest paths until we've removed them all
+    while(length(set_of_pairs) > 0) {
+        # iterate over pairs
+        for(pair in set_of_pairs) {
+            # not that intuitive, but 1st check whether there is a shortest path
+            # (returns a matrix with Inf indicating there is no path)
+            res <- shortest.paths(network, as.numeric(pair[1]), as.numeric(pair[2]))
+            if(res[1,1] == Inf) {
+                # remove the pair from pairs_to_check
+                set_of_pairs <- set_of_pairs - set(pair)
+            }
+            else {
+                # find the path and the best edge to remove and delete it from network
+                res <- get.shortest.paths(network, as.numeric(pair[1]), as.numeric(pair[2]))
+                path <- res$vpath[[1]]
+                edge <- select_edge_for_removal(network, path) 
+                network[edge[1], edge[2]] <- FALSE
+            }
+        }
+    }
+
+    network
+}
+
+# Remove middle edge
+select_edge_for_removal <- function(network, path) {
+    # path should at least be greater than 1
+    # we may need to think about other cases here
+    stopifnot(length(path) > 1)
+    start <- floor(length(path)/2)
+    middle_edge <- c(path[start], path[start+1])
+}
+    
 
 # Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),
