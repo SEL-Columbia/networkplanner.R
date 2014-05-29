@@ -138,6 +138,10 @@ read_networkplan <- function(directory_name, debug=F) {
      
     segments_fids <- decompose_spatial_lines(network_shp)
     network <- create_graph(metrics_df, segments_fids$segments, segments_fids$fids) 
+    
+    # ensure that all subgraphs from fake nodes are disjoint and simplify the result
+    network <- remove_paths_between_fakes(network)
+    network <- simplify(network, remove.loops=TRUE, edge.attr.comb="first")
 
     # Keep original edges which have the FID and set the original vertex id
     # so that we can merge back once the directed trees have been created
