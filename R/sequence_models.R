@@ -23,13 +23,13 @@ pop_sequence_model <- list(accumulator=pop_accumulate,
 #' helper function
 mv_v_dmd_get_upstream_edge_fields <- function(g, vid) {
     distance <- 0
-    fid <- -1
+    id <- -1
     par <- V(g)[ nei(vid, mode="in") ]
     if(length(par)) {
         distance <- E(g)[ par %->% vid ]$distance
-        fid <- E(g)[ par %->% vid ]$FID
+        fid <- E(g)[ par %->% vid ]$ID
     } 
-    l <- list(distance=distance, FID=fid)
+    l <- list(distance=distance, ID=id)
     l
 }
     
@@ -63,7 +63,7 @@ mv_v_dmd_accumulate <- function(node_df, edge_df, g, vid) {
                Sequence..Downstream.distance.sum.m.per.downstream.demand.sum.kwh=sum_mv_v_dmd,
                Sequence..Vertex.id=vid,
                Sequence..Root.vertex.id=root_vertex,
-               Sequence..Upstream.fid=edge_fields$FID) 
+               Sequence..Upstream.id=edge_fields$ID) 
 }
 
 #' @export
