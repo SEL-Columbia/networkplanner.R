@@ -31,7 +31,7 @@ get_coord_dataframe <- function(sldf) {
 # create undirected graph via segment_matrix/nodes via graph.data.frame
 # segment_node_df must have an id column that represents the index of the 
 # node in the dataframe
-get_undirected_graph <- function(segment_matrix, segment_node_df, fids) {
+get_undirected_graph <- function(segment_matrix, segment_node_df, ids) {
     from_nodes <- as.data.frame(segment_matrix[1:nrow(segment_matrix),1,1:2])
     names(from_nodes) <- c("X", "Y")
     to_nodes <- as.data.frame(segment_matrix[1:nrow(segment_matrix),2,1:2])
@@ -44,7 +44,7 @@ get_undirected_graph <- function(segment_matrix, segment_node_df, fids) {
     # now re-order according to edge_ids
     from_df <- from_coord_merge[with(from_coord_merge, order(edge_id)),] 
     to_df <- to_coord_merge[with(to_coord_merge, order(edge_id)),] 
-    edge_df <- data.frame(from=from_df$id, to=to_df$id, FID=fids)
+    edge_df <- data.frame(from=from_df$id, to=to_df$id, ID=ids)
     # re-order columns (graph.data.frame requires id column 1st) 
     vertex_names <- c(c("id"), setdiff(names(segment_node_df), c("id")))
     vertex_df <- segment_node_df[,vertex_names] 
@@ -93,7 +93,7 @@ get_adjacency_matrix <- function(segment_matrix, segment_node_df, weighted=FALSE
     adj_matrix
 }
 
-assign_distances <- function(network, proj4string="") {
+assign_weights <- function(network, weight_field="distance", proj4string="") {
 
     nodes_edges <- get.data.frame(network, what="both")
     nodes <- nodes_edges$vertices
@@ -102,13 +102,13 @@ assign_distances <- function(network, proj4string="") {
     nodes_xyv <- nodes[,c("X", "Y", "vid")]
     new_edges <- merge(edges, nodes_xyv, by.x="from", by.y="vid", all.x=TRUE)
     new_edges <- merge(new_edges, nodes_xyv, by.x="to", by.y="vid", all.x=TRUE)
-    new_edges$distance <- dist_fun(new_edges[,c("X.x","Y.x")], new_edges[,c("X.y","Y.y")], proj4string)
+    new_edges[,weight_field] <- dist_fun(new_edges[,c("X.x","Y.x")], new_edges[,c("X.y","Y.y")], proj4string)
 
-    new_edges <- new_edges[,c("from", "to", "distance")]
+    new_edges <- new_edges[,c("from", "to", weight_field)]
     vertex_names <- c(c("vid"), setdiff(names(nodes), c("vid")))
     nodes <- nodes[,vertex_names]
 
-    g <- graph.data.frame(new_edges, directed=TRUE, nodes)
+    g <- graph.data.frame(new_edges, directed=is.directed(network), nodes)
     # get rid of the name attribute as this leads to confusion
     g <- remove.vertex.attribute(g, "name")
     g
@@ -120,37 +120,37 @@ assign_distances <- function(network, proj4string="") {
 #  2:  The points of the segment (should only be 2 per segment)
 #  3:  The coordinates per point (again, only 2)
 # Invariant: we should be connecting straight lines in 2D space (ie, 2nd + 3rd dims are 2)
-# AND get the list of FIDs 
+# AND get the list of IDs 
 # return them both as elements of a list
 decompose_spatial_lines = function(sldf) {
     
     # Looping through every line slot in SLDF object 
     # save the 2X2 matrix representation of a single edge into 2 3D array as the 1st member of the list
-    # and save the FID as another element of the list
+    # and save the ID as another element of the list
     # So, for each element in the resulting list there is a list of segments s where:
     #   s[[1]]:  the 2X2 matrix representing the segment
-    #   s[[2]]:  the FID of the parent shapefile element
-    line_coords_fids <- lapply(sldf@lines, function(l) {
-        FID <- as.integer(l@ID)
+    #   s[[2]]:  the ID of the parent shapefile element
+    line_coords_ids <- lapply(sldf@lines, function(l) {
+        ID <- as.integer(l@ID)
         lapply(l@Lines, function(segment) {
             my_coords <- segment@coords
             n <- dim(my_coords)[1]
             if(n == 2){
-                list(array(data=my_coords, dim=c(1,2,2)), FID)
+                list(array(data=my_coords, dim=c(1,2,2)), ID)
             }else{
                 list(laply(1:(n-1), function(row_num){
                     cbind(my_coords[row_num, ], my_coords[row_num+1, ])
-                }), FID)
+                }), ID)
             }
             
         })    
     })
     
     # extract the line_coords from the above
-    line_coords <- lapply(line_coords_fids, function(l) { lapply(l, function(inner_l) { inner_l[[1]] } ) } )
+    line_coords <- lapply(line_coords_ids, function(l) { lapply(l, function(inner_l) { inner_l[[1]] } ) } )
 
-    # extract the fids from the above
-    fids <- lapply(line_coords_fids, function(l) { lapply(l, function(inner_l) { inner_l[[2]] } ) } )
+    # extract the ids from the above
+    ids <- lapply(line_coords_ids, function(l) { lapply(l, function(inner_l) { inner_l[[2]] } ) } )
 
     # Looping through every cell in the nested list structure and concatenate the 3D arrays 
     # into the master coordinate array that Adjacency matrix function takes
@@ -160,8 +160,8 @@ decompose_spatial_lines = function(sldf) {
         }),
         along=1))
 
-    fids <- do.call(abind, list(lapply(
-        fids, function(l){ 
+    ids <- do.call(abind, list(lapply(
+        ids, function(l){ 
             do.call(abind, list(l, along=1))
         }),
         along=1))
@@ -169,7 +169,7 @@ decompose_spatial_lines = function(sldf) {
     # Safety measure to make sure that the coordinate matrix is Nx2x2, 
     # in which N is the number of sigle point in SLDF
     stopifnot(dim(line_coords)[2:3] == c(2,2))
-    l <- list(segments=line_coords, fids=fids)
+    l <- list(segments=line_coords, ids=ids)
     return(l)
 }
 
@@ -190,9 +190,9 @@ test_edge_pairs <- function(segment_node_df, p1, p2, network) {
 #' 
 #' @param metrics_df dataframe representing the nodes (with attributes) of the graph
 #' @param segment_matrix NX2X2 matrix of segments X end_points X coordinates representing a network
-#' @param fids set of fids associated with each segment in matrix to be associated with edges
+#' @param ids set of ids associated with each segment in matrix to be associated with edges
 #' @return an igraph object of merged metrics_df nodes and segment_matrix segments 
-create_graph <- function(metrics_df, segment_matrix, fids, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
+create_graph <- function(metrics_df, segment_matrix, ids, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
     
     p1 <- segment_matrix[1:dim(segment_matrix)[1],1,1:2]
     p2 <- segment_matrix[1:dim(segment_matrix)[1],2,1:2]
@@ -200,7 +200,7 @@ create_graph <- function(metrics_df, segment_matrix, fids, proj4string="+proj=lo
     names(segment_node_df) <- c("X", "Y")
     segment_node_df$id <- 1:nrow(segment_node_df)
  
-    network <- get_undirected_graph(segment_matrix, segment_node_df, fids)
+    network <- get_undirected_graph(segment_matrix, segment_node_df, ids)
 
     # ensure that segment_node_df is aligned with graph vertices
     stopifnot(segment_node_df$X==V(network)$X & segment_node_df$Y==V(network)$Y)
@@ -385,6 +385,69 @@ get_edge_spldf <- function(np){
     return(line_df)
 }    
 
+# Eliminate edges from paths connecting "fake nodes" to preserve the invariant that
+# trees from fake nodes are disjoint
+# Assumes network is not directed and vertices have nid attribute (to find fake nodes via)
+# returns network of disjoint trees rooted at fake nodes
+remove_paths_between_fakes <- function(network) {
+
+    # TODO:  Fill this in (it's only stubbed right now)
+    # get the fake nodes
+    fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
+
+    # create all vertex pairs that we need to check for paths
+    set_of_pairs <- t(combn(fake_vids, 2))
+
+    # function to get num_paths between pair of vertices (used within apply below)
+    get_num_paths <- function(row) {
+        edge.connectivity(network, row[1], row[2])
+    }
+
+    # check pairs for shortest paths until we've removed them all
+    while(nrow(set_of_pairs) > 0) {
+        # Remove pairs without paths between them
+        num_paths <- apply(set_of_pairs, 1, get_num_paths)
+        non_zero_paths <- which(num_paths > 0)
+        set_of_pairs <- set_of_pairs[non_zero_paths,]
+        # Replace this loop with something more efficient? 
+        if(nrow(set_of_pairs) > 0) {
+            for(i in 1:nrow(set_of_pairs)) {
+                # find the path and the best edge to remove and delete it from network
+                pair <- set_of_pairs[i,]
+                # need this check in case prior removal eliminated path b/w this pair
+                if(get_num_paths(pair) > 0) {
+                    res <- get.shortest.paths(network, pair[1], pair[2])
+                
+                    path <- res$vpath[[1]]
+                    edge <- select_edge_for_removal(network, path) 
+                    network[edge[1], edge[2]] <- FALSE
+                }
+            }
+        }
+    }
+    network
+}
+
+
+# Remove middle edge
+select_edge_for_removal <- function(network, path) {
+    # path should at least be greater than 1
+    # we may need to think about other cases here
+    stopifnot(length(path) > 1)
+    start <- floor(length(path)/2)
+    middle_edge <- c(path[start], path[start+1])
+}
+    
+# Ensure we have minimum spanning trees of each component of 
+# the graph (weighted by distance), return new graph
+min_span_components <- function(network, proj4string="") {
+
+    weighted <- assign_weights(network, weight_field="weight", proj4string)
+    components <- decompose.graph(weighted)
+    min.components <- lapply(components, minimum.spanning.tree, algorith="prim")
+    min.network <- graph.disjoint.union(min.components)
+} 
+        
 
 # Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),

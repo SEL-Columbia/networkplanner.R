@@ -130,20 +130,31 @@ read_networkplan <- function(directory_name, debug=F) {
     # read nodes and assign id
     metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
     proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
-    nodes <- SpatialPointsDataFrame(coords=metrics_df[,c("X","Y")], data=metrics_df,
-                                    proj4string=CRS(proj4string))
     
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
      
-    segments_fids <- decompose_spatial_lines(network_shp)
-    network <- create_graph(metrics_df, segments_fids$segments, segments_fids$fids) 
+    # make sure projections match
+    # (Because we do matching based on coordinates)
+    stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
 
-    # Keep original edges which have the FID and set the original vertex id
+    segments_ids <- decompose_spatial_lines(network_shp)
+    network <- create_graph(metrics_df, segments_ids$segments, segments_ids$ids) 
+    
+    # Keep original edges which have the ID and set the original vertex id
     # so that we can merge back once the directed trees have been created
+    # NOTE:  If edges are removed in the following simplification steps
+    #        Then associated IDs will be lost when merged back
     orig_edge_df <- get.data.frame(network, what="edges")
     V(network)$orig_v_id <- 1:length(V(network))
-    
+
+    # ensure that all subgraphs from fake nodes are disjoint and simplify the result
+    network <- remove_paths_between_fakes(network)
+    network <- simplify(network, remove.loops=TRUE)
+    # Take the min span of components in case there are any cycles remaining in them
+    # (can occur when scenarios are merged)
+    network <- min_span_components(network, proj4string)
+
     # Now create directed graph from "fake" nodes (for trees connected
     # to the existing network) and "roots" (for trees that are NOT connected)
     # TODO:  Needs testing
@@ -156,16 +167,30 @@ read_networkplan <- function(directory_name, debug=F) {
     
     # Now assign distances to edges (might be faster to do it within create_graph, but
     # they get lost within the dominator.tree calls in create_directed_trees)
-    network <- assign_distances(network, proj4string)
+    network <- assign_weights(network, weight_field="distance", proj4string)
    
-    # Re-assign the FIDS 
+    # Re-assign the IDs
     # need to map original vertex ids to new ones
     orig_new_v_map <- order(V(network)$orig_v_id)
-    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, network, "FID")
+    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, network, "ID")
+
+    # now add all other fields from original shapefile
+    field_names <- names(network_shp@data)
+    # can we count on ID being a 0 based index into the data.frame
+    # s.t. we can index into it via +1???
+    new_edge_df[, field_names] <- network_shp@data[new_edge_df$ID+1, field_names]
     
+    # use igraph indexing to assign ID back to directed igraph
+    network[from=new_edge_df$from, to=new_edge_df$to, attr="ID"] <- new_edge_df$ID
+    # is there a better way to merge in all edge fields?  
+    for(nm in field_names) {
+        vec <- new_edge_df[,nm]
+        # more ugliness (how to deal w/ factors nicely?
+        if(class(vec)=="factor") { vec <- as.character(vec) }
+        network[from=new_edge_df$from, to=new_edge_df$to, attr=nm] <- vec
+    }
+
     # assign "Sequence" attributes
-    # use igraph indexing to assign FID back to directed igraph
-    network[from=new_edge_df$from, to=new_edge_df$to, attr="FID"] <- new_edge_df$FID
     V(network)$Sequence..Is.root <- V(network)$is_root 
     V(network)$Sequence..Is.fake <- V(network)$is_fake
    
@@ -307,7 +332,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
         new_nodes <- merge(nodes, result_nodes, by.x="vid", by.y="vid", all.x=TRUE)
 
         # join to upstream edges
-        # Let's NOT do this...user can join nodes to upstream edges via Upstream.FID later on
+        # Let's NOT do this...user can join nodes to upstream edges via Upstream.ID later on
         # new_edges <- merge(edges, result_nodes, by.x="to", by.y="vid", all.x=TRUE)
 
         # reorder the edge names (graph.data.frame needs from, to in 1st 2 cols)

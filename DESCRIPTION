@@ -20,6 +20,7 @@ Depends:
     rgeos,
     abind,
     geosphere,
+    sets,
     R.utils
 License: TBD
 URL: http://www.SEL-Columbia.github.com/networkplanner.R
