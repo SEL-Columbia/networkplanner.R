@@ -17,8 +17,8 @@ expect_NetworkPlan_structure <- function(np) {
     expect_true(class(np@network)=="igraph")
     if(length(V(np@network))) {
         v_attrs <- list.vertex.attributes(np@network)
-        required_attrs <- c("Sequence..Is.root", 
-                            "Sequence..Is.fake")
+        required_attrs <- c("Network..Is.root", 
+                            "Network..Is.fake")
         expect_true(sum(v_attrs %in% required_attrs)==length(required_attrs))
     }
 }
@@ -53,8 +53,8 @@ sample_NetworkPlan <- function() {
     dir_mst <- dir_mst_dom$domtree
 
     roots <- as.numeric(V(dir_mst)[degree(dir_mst, mode="in")==0])
-    V(dir_mst)$Sequence..Is.root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
-    V(dir_mst)$Sequence..Is.fake <- FALSE
+    V(dir_mst)$Network..Is.root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
+    V(dir_mst)$Network..Is.fake <- FALSE
 
     # There's no existing_network in this plan
     list(nodes=sp_df, np=new("NetworkPlan", network=dir_mst))
@@ -120,8 +120,8 @@ simple_NetworkPlan <- function() {
     V(dir_network)$Y <- coord_df$Y
 
     roots <- as.numeric(V(dir_network)[degree(dir_network, mode="in")==0])
-    V(dir_network)$Sequence..Is.root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
-    V(dir_network)$Sequence..Is.fake <- FALSE
+    V(dir_network)$Network..Is.root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
+    V(dir_network)$Network..Is.fake <- FALSE
 
     new("NetworkPlan", network=dir_network)
 }
@@ -201,7 +201,7 @@ test_that("reading and sequencing scenario 108 works", {
     edge_verts <- c(edge_df$from, edge_df$to)
     vert_df <- vert_df[1:nrow(vert_df) %in% edge_verts,]
     # filter out fake nodes
-    real_vert_df <- subset(vert_df, subset=!Sequence..Is.fake)
+    real_vert_df <- subset(vert_df, subset=!Network..Is.fake)
     sorted_df <- real_vert_df[with(real_vert_df, order(Sequence..Far.sighted.sequence)),]
     sum_pop_by_seq <- sorted_df$sum_pop
     sum_pop_desc <- sort(real_vert_df$sum_pop, decreasing=TRUE)

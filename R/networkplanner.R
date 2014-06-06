@@ -134,8 +134,7 @@ read_networkplan <- function(directory_name, debug=F) {
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
      
-    # make sure projections match
-    # (Because we do matching based on coordinates)
+    # make sure projections match (we match metrics and network on coordinates)
     stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
 
     segments_ids <- decompose_spatial_lines(network_shp)
@@ -177,7 +176,7 @@ read_networkplan <- function(directory_name, debug=F) {
     # now add all other fields from original shapefile
     field_names <- names(network_shp@data)
     # can we count on ID being a 0 based index into the data.frame
-    # s.t. we can index into it via +1???
+    # s.t. we can index into it via ID+1???
     new_edge_df[, field_names] <- network_shp@data[new_edge_df$ID+1, field_names]
     
     # use igraph indexing to assign ID back to directed igraph
@@ -185,14 +184,14 @@ read_networkplan <- function(directory_name, debug=F) {
     # is there a better way to merge in all edge fields?  
     for(nm in field_names) {
         vec <- new_edge_df[,nm]
-        # more ugliness (how to deal w/ factors nicely?
+        # more ugliness (how to deal w/ factors nicely?)
         if(class(vec)=="factor") { vec <- as.character(vec) }
         network[from=new_edge_df$from, to=new_edge_df$to, attr=nm] <- vec
     }
 
     # assign "Sequence" attributes
-    V(network)$Sequence..Is.root <- V(network)$is_root 
-    V(network)$Sequence..Is.fake <- V(network)$is_fake
+    V(network)$Network..Is.root <- V(network)$is_root 
+    V(network)$Network..Is.fake <- V(network)$is_fake
    
     # Remove temp vertex attributes
     network <- remove.vertex.attribute(network, "orig_v_id") 
@@ -245,9 +244,9 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
 
         nodes <- get.data.frame(np@network, what="vertices")
         edges <- get.data.frame(np@network, what="edges")
-        # start from nodes where Sequence..Is.root==TRUE since we don't want to
+        # start from nodes where Network..Is.root==TRUE since we don't want to
         # sequence "fake" nodes 
-        roots <- as.integer(V(np@network)[V(np@network)$Sequence..Is.root])
+        roots <- as.integer(V(np@network)[V(np@network)$Network..Is.root])
         # eliminate the roots that are not part of the network by
         # looking them up in the verts of the edges of the graph
         all_edge_vertices <- c(edges$from, edges$to)
@@ -281,7 +280,7 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
 
         # now apply the sequence back
         # only apply to "real" nodes that are ON the network
-        real_nodes <- as.integer(V(np@network)[!V(np@network)$Sequence..Is.fake])
+        real_nodes <- as.integer(V(np@network)[!V(np@network)$Network..Is.fake])
         real_nodes_with_edges <- real_nodes[real_nodes %in% all_edge_vertices]
         num_real_nodes <- length(real_nodes_with_edges)
 
@@ -313,7 +312,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
 
         # we want to exclude any "fake" nodes (i.e. those nodes that
         # do not have the same attributes as others) if any
-        real_nodes <- subset(nodes, !nodes$Sequence..Is.fake) 
+        real_nodes <- subset(nodes, !nodes$Network..Is.fake) 
  
         #inner function to "unravel" the dataframe before passing to the accumulator  
         apply_to_down_nodes <- function(df) { 
@@ -353,6 +352,64 @@ setMethod("accumulate", signature(np="NetworkPlan"),
     }
 )
 
+#' Determine whether a NetworkPlan is valid
+#'
+#' @param np a NetworkPlan
+#' @return A boolean indicating whether the NetworkPlan is valid 
+#' @export
+is_valid_networkplan <- function(np) {
+    if(!(class(np)=="NetworkPlan" && class(np@network)=="igraph")) {
+        message("Not a proper NetworkPlan object")
+        return(FALSE)
+    }
+    if(length(V(np@network))) {
+        v_attrs <- list.vertex.attributes(np@network)
+        required_attrs <- c("Network..Is.root", 
+                            "Network..Is.fake")
+        if(sum(v_attrs %in% required_attrs)!=length(required_attrs)) {
+            message("NetworkPlan missing required attributes")
+            return(FALSE)
+        }
+    }
+    return(TRUE)
+}
+
+
+#' Determine whether a NetworkPlan meets sequencing criteria.
+#' This means that there are no paths between "fake nodes" and
+#' that there are no cycles.
+#'
+#' @param np a NetworkPlan
+#' @return A boolean indicating whether the NetworkPlan can be sequenced
+#' @export
+can_sequence = function(np) {
+
+    # Ensure that there are no paths between fake nodes
+    fake_vids <- as.numeric(V(np@network)[V(np@network)$Network..Is.fake])
+    # create all vertex pairs that we need to check for paths
+    set_of_pairs <- t(combn(fake_vids, 2))
+    # function to get num_paths between pair of vertices (used within apply below)
+    get_num_paths <- function(row) {
+        edge.connectivity(np@network, row[1], row[2])
+    }
+    num_paths <- apply(set_of_pairs, 1, get_num_paths)
+    if(any(num_paths > 0)) {
+        message("NetworkPlan contains paths between fake nodes")
+        return(FALSE)
+    }
+   
+    # Now check whether each component is a tree
+    # (each node must have one incoming edge except the root node)
+    components <- decompose.graph(np@network)
+    test_results <- sapply(components, function(g) { vcount(g)==(ecount(g)+1) })
+    if(!all(test_results)) {
+        message("NetworkPlan components are not all trees")
+        return(FALSE)
+    }
+    return(TRUE)
+}
+
+
 #' Write line shapfile from networkplan object into the given directory
 #'
 #' @param np a NetworkPlan
@@ -374,7 +431,7 @@ write.NetworkPlan = function(np, directory_name,
     # subsetting node_df according to includeFake
     node_df <- get.data.frame(np@network, what="vertices")
     if (includeFake == FALSE){
-        output_df <- subset(node_df, !Sequence..Is.fake)
+        output_df <- subset(node_df, !Network..Is.fake)
     }
     
     # getting edge SPLDF from NP object
