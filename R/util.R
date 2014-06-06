@@ -391,7 +391,6 @@ get_edge_spldf <- function(np){
 # returns network of disjoint trees rooted at fake nodes
 remove_paths_between_fakes <- function(network) {
 
-    # TODO:  Fill this in (it's only stubbed right now)
     # get the fake nodes
     fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
 
