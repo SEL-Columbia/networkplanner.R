@@ -19,6 +19,93 @@ dist_fun <- function(points_1, points_2, projection_type="")
   return(dist)
 }
 
+#' Reassign fields from one undirected graph to another directed graph 
+#' via edge dataframes and a vertex mapping.  
+#' 
+#' @param vertex_id_map maps the original graph vertex ids to the new graph 
+#' @param orig_edge_df the original graph edge dataframe
+#' @param field to be reassigned
+#' @return An edge dataframe with from/to fields corresponding to edges in the
+#'         graph to be updated along with the fields to be added (can be used
+#'         via the igraph index operator to reassign fields to the igraph)
+reassignment_edge_df <- function(vertex_id_map, orig_edge_df, network, field) {
+    orig_edge_df$new_from <- vertex_id_map[orig_edge_df$from]
+    orig_edge_df$new_to <- vertex_id_map[orig_edge_df$to]
+    # need to do both sides because original was undirected
+    from_to_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_from, to=orig_edge_df$new_to]),]
+    to_from_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_to, to=orig_edge_df$new_from]),]
+    new_edge_df <- data.frame(
+                    from=c(from_to_orig_edge_df$new_from, to_from_orig_edge_df$new_to), 
+                    to=c(from_to_orig_edge_df$new_to, to_from_orig_edge_df$new_from))
+    new_edge_df[,field] <- c(from_to_orig_edge_df[,field], to_from_orig_edge_df[,field])
+    new_edge_df
+}
+
+#' Map edge dataframe fields to the attributes of a graph via a vertex id mapping  
+#' 
+#' @param from_edge_df the original graph edge dataframe
+#' @param to_graph the igraph that we're mapping to
+#' @param vertex_id_map maps the original graph vertex ids to the new graph 
+#'        (the index of the vector represents the original vertex id and
+#'         the value at the index represents the new vertex id)
+#' @return An edge dataframe with from/to fields corresponding to edges in the
+#'         graph to be updated along with the fields to be added (can be used
+#'         via the igraph index operator to reassign fields to the igraph)
+map_edge_df <- function(from_edge_df, to_graph, vertex_id_map, multi_dir=TRUE) {
+    from_edge_df$new_from <- vertex_id_map[from_edge_df$from]
+    from_edge_df$new_to <- vertex_id_map[from_edge_df$to]
+    
+    # extract the records that match an edge in the to_graph and start building the new dataframe
+    from_to_orig_edge_df <- from_edge_df[as.logical(to_graph[from=from_edge_df$new_from, to=from_edge_df$new_to]),]
+    new_edge_df <- data.frame(from=from_to_orig_edge_df$new_from, to=from_to_orig_edge_df$new_to)
+
+    # now map back all fields other than from/to
+    fields <- names(from_to_orig_edge_df)[!names(from_to_orig_edge_df) %in% c("from", "to")]
+    new_edge_df <- cbind(new_edge_df, from_to_orig_edge_df[,fields])
+
+    # map both sides if multi_dir
+    if(multi_dir) {
+        to_from_orig_edge_df <- from_edge_df[as.logical(to_graph[from=from_edge_df$new_to, to=from_edge_df$new_from]),]
+        reversed_edge_df <- data.frame(from=to_from_orig_edge_df$new_to, to=to_from_orig_edge_df$new_from)
+
+        # now map back all fields other than from/to
+        fields <- names(to_from_orig_edge_df)[!names(to_from_orig_edge_df) %in% c("from", "to")]
+        reversed_edge_df <- cbind(reversed_edge_df, to_from_orig_edge_df[,fields])
+        
+        # cat the reversed edges onto the df to be returned
+        new_edge_df <- rbind(new_edge_df, reversed_edge_df)
+    }
+
+    new_edge_df
+}
+
+#' assign edge attributes from one graph to another via a vertex id mapping
+#' 
+#' @param from_graph the igraph to take edge attributes from
+#' @param to_graph the igraph to assign edge attributes to
+#' @param id_map the mapping of from_graph to to_graph vertex ids
+#' @param multi_dir whether to apply from_graph edge attributes in both 
+#'        directions to the to_graph 
+#' @return a new graph matching the topology of the to_graph with attributes of 
+#'        from_graph
+map_edge_attributes <- function(from_graph, to_graph, id_map, multi_dir=TRUE) {
+
+    from_edge_df <- get.data.frame(from_graph, what="edges")
+    # get the edge dataframe corresponding to the to_graph
+    to_edge_df <- map_edge_df(from_edge_df, to_graph, id_map, multi_dir)
+    
+    # map all fields to the to_graph
+    fields <- names(from_edge_df)[!names(from_edge_df) %in% c("from", "to")]
+    for(nm in fields) {
+        vec <- to_edge_df[,nm]
+        # more ugliness (how to deal w/ factors nicely?)
+        if(class(vec)=="factor") { vec <- as.character(vec) }
+        to_graph[from=to_edge_df$from, to=to_edge_df$to, attr=nm] <- vec
+    }
+    to_graph
+}
+  
+     
 # assign id, x, y to all points in SpatialLinesDataFrame
 get_coord_dataframe <- function(sldf) {
     coord_list <- llply(sldf@lines, function(l) { l@Lines[[1]]@coords })
@@ -302,14 +389,13 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
                                            get_directed_subgraph, 
                                            connected)
 
-
-    # Temporary visualization for validation within this function
-    # TODO: remove in production code base
-    # plot(connected_directed_graph, vertex.size=4, edge.arrow.size=0.1)
-    
+   
     # Now work on disconnected net
-    # Assumes decompose retains vertex ids (it DOES NOT!)
+    # Note:  decompose.graph does NOT maintain vertex ids
+    # so we use the vid attribute to reference the vertices
+    # in the original "disconnected" graph
     disconnected_subgraphs <- decompose.graph(disconnected)
+
     # wrapper for root selector to decouple it from how we
     # maintain link between subgraphs and parent graph (via vid)
     select_vids <- function(g) { 
@@ -317,7 +403,6 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
         V(g)[root_index]$vid
     }
     disconnected_roots <- sapply(disconnected_subgraphs, select_vids) 
-    # print(disconnected_roots)
     disconnected_directed_subgraphs <- lapply(disconnected_roots, 
                                               get_directed_subgraph, 
                                               disconnected)
@@ -327,7 +412,6 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     #        any overlap between graphs (this works much faster with
     #        no messy added attributes)
     #        disjoint runs in seconds rather than minutes for graph.union
-    # TODO:  Do we want to keep these separate?  
     connected_directed_graph <- graph.disjoint.union(connected_directed_subgraphs)
 
     # Designate connected net nodes with is_fake,is_root attributes

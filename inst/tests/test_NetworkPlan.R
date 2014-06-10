@@ -11,6 +11,17 @@ test_data_dir = "../test_data/"
 stopifnot(file.exists(test_data_dir))
 proj4str <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
 
+# temp workaround for creating distance pairs from points
+naive_hav_dist_pairs <- function(A, B) {
+    result <- matrix(nrow=nrow(A), ncol=nrow(B))
+    for (i in 1:nrow(A)) {
+        for(j in 1:nrow(B)) {
+            result[i, j] <- distHaversine(A[i,], B[j,])
+        }
+    }
+    result
+} 
+
 # High-level "expect" function, can be used to check the structure of any NetworkPlan
 expect_NetworkPlan_structure <- function(np) {
     expect_true(class(np)=="NetworkPlan")
@@ -22,17 +33,6 @@ expect_NetworkPlan_structure <- function(np) {
         expect_true(sum(v_attrs %in% required_attrs)==length(required_attrs))
     }
 }
-
-# temp workaround for creating distance pairs from points
-naive_hav_dist_pairs <- function(A, B) {
-    result <- matrix(nrow=nrow(A), ncol=nrow(B))
-    for (i in 1:nrow(A)) {
-        for(j in 1:nrow(B)) {
-            result[i, j] <- distHaversine(A[i,], B[j,])
-        }
-    }
-    result
-} 
 
 sample_NetworkPlan <- function() { 
     coords <- matrix(runif(20, min=-1.0, max=1.0), nrow=10, ncol=2)
@@ -126,6 +126,34 @@ simple_NetworkPlan <- function() {
     new("NetworkPlan", network=dir_network)
 }
 
+test_that("mapping graph edge attributes works", {
+    
+    # test that we can map edge attributes from a simple graph: 
+    # 1-2, 2-3, 3-4
+    # to an alternative graph: 
+    # 4->3, 3->2, 2->1
+      
+    adj_mat <- matrix(nrow=4, ncol=4)
+    adj_mat[,] <- FALSE
+    rev_mat <- adj_mat
+    adj_mat[cbind(c(1, 2, 3), c(2, 3, 4))] <- TRUE
+    rev_mat[cbind(c(4, 3, 2), c(3, 2, 1))] <- TRUE
+
+    original <- graph.adjacency(adj_mat, mode="undirected")
+    alternate <- graph.adjacency(rev_mat, mode="directed")
+    
+    o_edge_df <- get.data.frame(original, what="edges")
+    E(original)$edge_name <- str_c(o_edge_df$from, "-", o_edge_df$to)
+    
+    # create id map of old index to new
+    id_map <- c(4, 3, 2, 1)
+    
+    mapped <- map_edge_attributes(original, alternate, id_map)
+    orig_names <- original[from=c(1, 2, 3), to=c(2, 3, 4), attr="edge_name"]
+    alt_names <- mapped[from=c(4, 3, 2), to=c(3, 2, 1), attr="edge_name"]
+    expect_equal(orig_names, alt_names)
+})
+    
 
 test_that("get adjacency matrix is correct", {
      

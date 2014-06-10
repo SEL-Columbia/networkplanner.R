@@ -95,27 +95,6 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
     file.remove("tmp.zip")
 }
 
-#' re-assign fields from one undirected graph to another directed graph 
-#' via edge dataframes and a vertex mapping.  
-#' 
-#' @param vertex_id_map maps the original graph vertex ids to the new graph 
-#' @param orig_edge_df the original graph edge dataframe
-#' @param field to be reassigned
-#' @return An edge dataframe with from/to fields corresponding to edges in the
-#'         graph to be updated along with the fields to be added (can be used
-#'         via the igraph index operator to reassign fields to the igraph)
-reassignment_edge_df <- function(vertex_id_map, orig_edge_df, network, field) {
-    orig_edge_df$new_from <- vertex_id_map[orig_edge_df$from]
-    orig_edge_df$new_to <- vertex_id_map[orig_edge_df$to]
-    # need to do both sides because original was undirected
-    from_to_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_from, to=orig_edge_df$new_to]),]
-    to_from_orig_edge_df <- orig_edge_df[as.logical(network[from=orig_edge_df$new_to, to=orig_edge_df$new_from]),]
-    new_edge_df <- data.frame(
-                    from=c(from_to_orig_edge_df$new_from, to_from_orig_edge_df$new_to), 
-                    to=c(from_to_orig_edge_df$new_to, to_from_orig_edge_df$new_from))
-    new_edge_df[,field] <- c(from_to_orig_edge_df[,field], to_from_orig_edge_df[,field])
-    new_edge_df
-}
     
 
 #' Read network plan from a directory in the filesystem
