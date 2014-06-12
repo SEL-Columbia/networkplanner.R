@@ -95,8 +95,6 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
     file.remove("tmp.zip")
 }
 
-    
-
 #' Read network plan from a directory in the filesystem
 #' 
 #' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
@@ -104,6 +102,91 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
 #' @return A NetworkPlan object
 #' @export
 read_networkplan <- function(directory_name, debug=F) {
+    base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
+    
+    # read nodes and assign id
+    metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
+    proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
+    
+    # read network
+    network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
+     
+    # make sure projections match (we match metrics and network on coordinates)
+    stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
+
+    segments_ids <- decompose_spatial_lines(network_shp)
+    network <- create_graph(metrics_df, segments_ids$segments, segments_ids$ids) 
+    
+    # At this point the network edges should only have the ID attribute from the network shapefile
+    # So, assign the rest of the shapefile attributes to the network
+    field_names <- names(network_shp@data)
+    edge_df <- get.data.frame(network, what="edges")
+
+    # Assumes that ID can be used as an index into the data.frame via ID+1
+    edge_df[, field_names] <- network_shp@data[edge_df$ID+1, field_names]
+    # is there a better way to merge in all edge fields?  
+    for(nm in field_names) {
+        vec <- edge_df[,nm]
+        # more ugliness (how to deal w/ factors nicely?)
+        if(class(vec)=="factor") { vec <- as.character(vec) }
+        network[from=edge_df$from, to=edge_df$to, attr=nm] <- vec
+    }
+
+    # assign "Network" attributes
+    # NOTE:  nid is the id of the relevant metrics-local node
+    #        if the vertex doesn't have one it's "fake"
+    V(network)$Network..Is.fake <- is.na(V(network)$nid)
+ 
+    # Remove temp vertex attributes
+    network <- remove.vertex.attribute(network, "nid") 
+
+    ## Return the NetworkPlan
+    new("NetworkPlan", network=network, proj=proj4string)
+}
+   
+#' Take an undirected NetworkPlan and make it "directed"
+#' such that all components are trees with directed edges
+#' to all vertices from the root
+#' 
+#' @param np A NetworkPlan
+#' @return A new "directed" NetworkPlan object
+make_directed <- function(np) {
+
+    # Keep original network and retain the original vertex id
+    # so that we can merge back once the directed trees have been created
+    original <- np@network
+    V(original)$orig_v_id <- 1:length(V(original))
+
+    # Now create directed graph from "fake" nodes (for trees connected
+    # to the existing network) and "roots" (for trees that are NOT connected)
+    # Root selector selects nodes for disconnected components
+    subnet_root_selector <- function(g) {
+        demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
+        root_index <- which(demands==max(demands))[1]
+    }
+    network <- create_directed_trees(original, root_selector=subnet_root_selector)
+ 
+    # map the original edge attributes back
+    # create the original -> new graph vertex mapping
+    orig_new_v_map <- order(V(network)$orig_v_id)
+    mapped <- map_edge_attributes(original, network, orig_new_v_map)
+    
+    # remove temp attrs
+    mapped <- remove.vertex.attribute(mapped, "vid") 
+    mapped <- remove.vertex.attribute(mapped, "orig_v_id") 
+    
+    np@network <- mapped
+    np
+}
+
+
+#' Read network plan from a directory in the filesystem
+#' 
+#' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
+#' @param debug if TRUE, will verify inputs and run failsafes
+#' @return A NetworkPlan object
+#' @export
+read_networkplan2 <- function(directory_name, debug=F) {
     base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # read nodes and assign id
@@ -157,6 +240,7 @@ read_networkplan <- function(directory_name, debug=F) {
     # can we count on ID being a 0 based index into the data.frame
     # s.t. we can index into it via ID+1???
     new_edge_df[, field_names] <- network_shp@data[new_edge_df$ID+1, field_names]
+    
     
     # use igraph indexing to assign ID back to directed igraph
     network[from=new_edge_df$from, to=new_edge_df$to, attr="ID"] <- new_edge_df$ID

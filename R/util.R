@@ -338,7 +338,7 @@ create_graph <- function(metrics_df, segment_matrix, ids, proj4string="+proj=lon
 # connected:  The graph reachable from "fake" nodes
 # disconnected:  The graph that is not reachable from "fake" nodes
 separate_subgraphs <- function(network) {
-    fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
+    fake_vids <- as.numeric(V(network)[V(network)$Network..Is.fake])
     reachable <- unique(do.call(c, lapply(fake_vids, function(x) { subcomponent(network, x, mode="ALL") })))
     connected_subgraph <- induced.subgraph(network, reachable)
     unreachable <- setdiff(as.numeric(V(network)), reachable)
@@ -357,7 +357,7 @@ default_root_selector <- function(graph) {
 # returned by create_graph), create directed graph with "fake" nodes and
 # "root" nodes
 create_directed_trees <- function(network, root_selector=default_root_selector) {
-    # first, find the connected and disconnected subgraps
+    # first, find the connected and disconnected subgraphs
     subgraphs <- separate_subgraphs(network)
     connected <- subgraphs$connected
     disconnected <- subgraphs$disconnected
@@ -367,7 +367,7 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     V(disconnected)$vid <- as.numeric(V(disconnected))
 
     # now find the roots of the connected subgraph
-    fake_vids <- as.numeric(V(connected)[is.na(V(connected)$nid)])
+    fake_vids <- as.numeric(V(connected)[V(connected)$Network..Is.fake])
 
     # Now get all subgraphs from fake vertices for connected net
     # make them directed and union them back together
@@ -417,13 +417,16 @@ create_directed_trees <- function(network, root_selector=default_root_selector) 
     # Designate connected net nodes with is_fake,is_root attributes
     connected_fake_roots <- as.numeric(V(connected_directed_graph)[degree(connected_directed_graph, mode="in")==0])
     connected_real_roots <- as.numeric(V(connected_directed_graph)[nei(connected_fake_roots)])
-    V(connected_directed_graph)$is_fake <- ifelse(V(connected_directed_graph) %in% connected_fake_roots,  TRUE, FALSE)
-    V(connected_directed_graph)$is_root <- ifelse(V(connected_directed_graph) %in% connected_real_roots,  TRUE, FALSE)
+    V(connected_directed_graph)$Network..Is.fake <- 
+        ifelse(V(connected_directed_graph) %in% connected_fake_roots,  TRUE, FALSE)
+    V(connected_directed_graph)$Network..Is.root <- 
+        ifelse(V(connected_directed_graph) %in% connected_real_roots,  TRUE, FALSE)
 
     disconnected_directed_graph <- graph.disjoint.union(disconnected_directed_subgraphs)
     disconnected_real_roots <- as.numeric(V(disconnected_directed_graph)[degree(disconnected_directed_graph, mode="in")==0])
-    V(disconnected_directed_graph)$is_fake <- FALSE
-    V(disconnected_directed_graph)$is_root <- ifelse(V(disconnected_directed_graph) %in% disconnected_real_roots,  TRUE, FALSE)
+    V(disconnected_directed_graph)$Network..Is.fake <- FALSE
+    V(disconnected_directed_graph)$Network..Is.root <- 
+        ifelse(V(disconnected_directed_graph) %in% disconnected_real_roots,  TRUE, FALSE)
 
     # return the combined directed graph
     combined_directed_graph <- graph.disjoint.union(connected_directed_graph, 
@@ -471,12 +474,12 @@ get_edge_spldf <- function(np){
 
 # Eliminate edges from paths connecting "fake nodes" to preserve the invariant that
 # trees from fake nodes are disjoint
-# Assumes network is not directed and vertices have nid attribute (to find fake nodes via)
+# Assumes network is not directed and vertices have Network..Is.fake attribute (to find fake nodes via)
 # returns network of disjoint trees rooted at fake nodes
 remove_paths_between_fakes <- function(network) {
 
     # get the fake nodes
-    fake_vids <- as.numeric(V(network)[is.na(V(network)$nid)])
+    fake_vids <- as.numeric(V(network)[V(network)$Network..Is.fake])
 
     # create all vertex pairs that we need to check for paths
     set_of_pairs <- t(combn(fake_vids, 2))
