@@ -95,7 +95,9 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
     file.remove("tmp.zip")
 }
 
-#' Read network plan from a directory in the filesystem
+#' Read scenario from a directory in the filesystem and
+#' create it's NetworkPlan.  
+#' tl;dr:  Converts scenario into an igraph object
 #' 
 #' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
 #' @param debug if TRUE, will verify inputs and run failsafes
@@ -143,14 +145,47 @@ read_networkplan <- function(directory_name, debug=F) {
     ## Return the NetworkPlan
     new("NetworkPlan", network=network, proj=proj4string)
 }
-   
+
+#' Take an undirected NetworkPlan and return one that 
+#' guarantees that fake nodes belong to disjoint components
+#' and that no cycles exist
+#' 
+#' @param np A NetworkPlan
+#' @return A new "cleaned" NetworkPlan object
+clean_networkplan <- function(np) {
+
+    # Keep original network and retain the original vertex id
+    # so that we can merge back once the directed trees have been created
+    original <- np@network
+    V(original)$orig_v_id <- 1:length(V(original))
+
+    # ensure that all subgraphs from fake nodes are disjoint and simplify the result
+    network <- remove_paths_between_fakes(original)
+    network <- simplify(network, remove.loops=TRUE)
+    # Take the min span of components in case there are any cycles remaining in them
+    # (can occur when scenarios are merged)
+    network <- min_span_components(network, proj4string)
+
+    # map the original edge attributes back
+    # create the original -> new graph vertex mapping
+    orig_new_v_map <- order(V(network)$orig_v_id)
+    mapped <- map_edge_attributes(original, network, orig_new_v_map)
+    
+    # remove temp attrs
+    mapped <- remove.vertex.attribute(mapped, "orig_v_id") 
+    
+    np@network <- mapped
+    np
+}
+
+  
 #' Take an undirected NetworkPlan and make it "directed"
 #' such that all components are trees with directed edges
 #' to all vertices from the root
 #' 
 #' @param np A NetworkPlan
 #' @return A new "directed" NetworkPlan object
-make_directed <- function(np) {
+directed_networkplan <- function(np) {
 
     # Keep original network and retain the original vertex id
     # so that we can merge back once the directed trees have been created
@@ -178,96 +213,6 @@ make_directed <- function(np) {
     np@network <- mapped
     np
 }
-
-
-#' Read network plan from a directory in the filesystem
-#' 
-#' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
-#' @param debug if TRUE, will verify inputs and run failsafes
-#' @return A NetworkPlan object
-#' @export
-read_networkplan2 <- function(directory_name, debug=F) {
-    base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
-    
-    # read nodes and assign id
-    metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
-    proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
-    
-    # read network
-    network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
-     
-    # make sure projections match (we match metrics and network on coordinates)
-    stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
-
-    segments_ids <- decompose_spatial_lines(network_shp)
-    network <- create_graph(metrics_df, segments_ids$segments, segments_ids$ids) 
-    
-    # Keep original edges which have the ID and set the original vertex id
-    # so that we can merge back once the directed trees have been created
-    # NOTE:  If edges are removed in the following simplification steps
-    #        Then associated IDs will be lost when merged back
-    orig_edge_df <- get.data.frame(network, what="edges")
-    V(network)$orig_v_id <- 1:length(V(network))
-
-    # ensure that all subgraphs from fake nodes are disjoint and simplify the result
-    network <- remove_paths_between_fakes(network)
-    network <- simplify(network, remove.loops=TRUE)
-    # Take the min span of components in case there are any cycles remaining in them
-    # (can occur when scenarios are merged)
-    network <- min_span_components(network, proj4string)
-
-    # Now create directed graph from "fake" nodes (for trees connected
-    # to the existing network) and "roots" (for trees that are NOT connected)
-    # TODO:  Needs testing
-    # root selector selects 
-    subnet_root_selector <- function(g) {
-        demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
-        root_index <- which(demands==max(demands))[1]
-    }
-    network <- create_directed_trees(network, root_selector=subnet_root_selector)
-    
-    # Now assign distances to edges (might be faster to do it within create_graph, but
-    # they get lost within the dominator.tree calls in create_directed_trees)
-    network <- assign_weights(network, weight_field="distance", proj4string)
-   
-    # Re-assign the IDs
-    # need to map original vertex ids to new ones
-    orig_new_v_map <- order(V(network)$orig_v_id)
-    new_edge_df <- reassignment_edge_df(orig_new_v_map, orig_edge_df, network, "ID")
-
-    # now add all other fields from original shapefile
-    field_names <- names(network_shp@data)
-    # can we count on ID being a 0 based index into the data.frame
-    # s.t. we can index into it via ID+1???
-    new_edge_df[, field_names] <- network_shp@data[new_edge_df$ID+1, field_names]
-    
-    
-    # use igraph indexing to assign ID back to directed igraph
-    network[from=new_edge_df$from, to=new_edge_df$to, attr="ID"] <- new_edge_df$ID
-    # is there a better way to merge in all edge fields?  
-    for(nm in field_names) {
-        vec <- new_edge_df[,nm]
-        # more ugliness (how to deal w/ factors nicely?)
-        if(class(vec)=="factor") { vec <- as.character(vec) }
-        network[from=new_edge_df$from, to=new_edge_df$to, attr=nm] <- vec
-    }
-
-    # assign "Sequence" attributes
-    V(network)$Network..Is.root <- V(network)$is_root 
-    V(network)$Network..Is.fake <- V(network)$is_fake
-   
-    # Remove temp vertex attributes
-    network <- remove.vertex.attribute(network, "orig_v_id") 
-    network <- remove.vertex.attribute(network, "is_root") 
-    network <- remove.vertex.attribute(network, "is_fake") 
-    # NOTE:  The nid attribute is added in create_graph and used in 
-    # create_directed_trees.  
-    network <- remove.vertex.attribute(network, "nid") 
-
-    ## determine which parts of network_shp go into network::igraph and existing_network::SpatialLinesDataFrame
-    new("NetworkPlan", network=network, proj=proj4string)
-}
-
 
 #' Default selector for sequence method
 #' This simply selects the node with the smallest vertex id

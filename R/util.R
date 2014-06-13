@@ -493,10 +493,12 @@ remove_paths_between_fakes <- function(network) {
     while(nrow(set_of_pairs) > 0) {
         # Remove pairs without paths between them
         num_paths <- apply(set_of_pairs, 1, get_num_paths)
+
         non_zero_paths <- which(num_paths > 0)
-        set_of_pairs <- set_of_pairs[non_zero_paths,]
+
+        set_of_pairs <- set_of_pairs[num_paths > 0,,drop=FALSE]
         # Replace this loop with something more efficient? 
-        if(nrow(set_of_pairs) > 0) {
+        if(!empty(set_of_pairs)) {
             for(i in 1:nrow(set_of_pairs)) {
                 # find the path and the best edge to remove and delete it from network
                 pair <- set_of_pairs[i,]

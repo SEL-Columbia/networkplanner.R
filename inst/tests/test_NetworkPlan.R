@@ -28,8 +28,7 @@ expect_NetworkPlan_structure <- function(np) {
     expect_true(class(np@network)=="igraph")
     if(length(V(np@network))) {
         v_attrs <- list.vertex.attributes(np@network)
-        required_attrs <- c("Network..Is.root", 
-                            "Network..Is.fake")
+        required_attrs <- c("Network..Is.fake")
         expect_true(sum(v_attrs %in% required_attrs)==length(required_attrs))
     }
 }
@@ -102,7 +101,7 @@ simple_coords_lines <- function() {
     line_matrix[3,,] <- xys[3:4,]
     line_matrix[4,,] <- xys[c(3,5),]
 
-    list(coord_df=coord_df, line_matrix=line_matrix)
+    list(coord_df=coord_df, xys=xys, line_matrix=line_matrix)
 }
 
 simple_NetworkPlan <- function() {
@@ -125,6 +124,42 @@ simple_NetworkPlan <- function() {
 
     new("NetworkPlan", network=dir_network)
 }
+
+unsequencable_NetworkPlan <- function() {
+    coords_lines <- simple_coords_lines()
+    line_matrix <- coords_lines$line_matrix
+    xys <- coords_lines$xys
+    # add a loop to the lines
+    line_matrix_loop <- array(0, dim=c(5, 2, 2))
+    line_matrix_loop[1:4,,] <- line_matrix[1:4,,]
+    line_matrix_loop[5,,] <- xys[c(5,2),]
+    coord_df <- coords_lines$coord_df
+    sample_pop <- floor(runif(nrow(coord_df), min=0, max=1000))
+    coord_attrs <- data.frame(id=coord_df$id, population=sample_pop)
+    sp_df <- SpatialPointsDataFrame(cbind(coord_df$X, coord_df$Y), coord_attrs, proj4string=proj4str)
+    adj_mat <- get_adjacency_matrix(line_matrix_loop, coord_df)
+    network <- graph.adjacency(adj_mat, mode="undirected")
+    V(network)$population <- sample_pop
+    V(network)$X <- coord_df$X
+    V(network)$Y <- coord_df$Y
+
+    V(network)$Network..Is.fake <- FALSE
+    # Add fake nodes that are connected
+    V(network)[c(1, 4)]$Network..Is.fake <- TRUE
+
+    new("NetworkPlan", network=network)
+}
+
+test_that("detect unsequenceable networkplan", {
+
+    un_np <- unsequencable_NetworkPlan()
+    expect_false(can_sequence(un_np))
+    
+    # clean it up so it should be sequenceable
+    clean_np <- clean_networkplan(un_np)
+    expect_true(can_sequence(clean_np))
+
+})
 
 test_that("mapping graph edge attributes works", {
     
@@ -211,6 +246,7 @@ test_that("reading and sequencing scenario 108 works", {
     # same as above, but with scenario 108
     scenario_dir <- str_c(test_data_dir, '108')
     np <- read_networkplan(scenario_dir)
+    np <- directed_networkplan(np) 
 
      # define simple sequence model
     sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$Pop)) }
