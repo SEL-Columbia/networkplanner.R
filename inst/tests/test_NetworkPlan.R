@@ -11,18 +11,6 @@ test_data_dir = "../test_data/"
 stopifnot(file.exists(test_data_dir))
 proj4str <- CRS("+proj=longlat +datum=WGS84 +ellps=WGS84")
 
-# High-level "expect" function, can be used to check the structure of any NetworkPlan
-expect_NetworkPlan_structure <- function(np) {
-    expect_true(class(np)=="NetworkPlan")
-    expect_true(class(np@network)=="igraph")
-    if(length(V(np@network))) {
-        v_attrs <- list.vertex.attributes(np@network)
-        required_attrs <- c("Sequence..Is.root", 
-                            "Sequence..Is.fake")
-        expect_true(sum(v_attrs %in% required_attrs)==length(required_attrs))
-    }
-}
-
 # temp workaround for creating distance pairs from points
 naive_hav_dist_pairs <- function(A, B) {
     result <- matrix(nrow=nrow(A), ncol=nrow(B))
@@ -33,6 +21,17 @@ naive_hav_dist_pairs <- function(A, B) {
     }
     result
 } 
+
+# High-level "expect" function, can be used to check the structure of any NetworkPlan
+expect_NetworkPlan_structure <- function(np) {
+    expect_true(class(np)=="NetworkPlan")
+    expect_true(class(np@network)=="igraph")
+    if(length(V(np@network))) {
+        v_attrs <- list.vertex.attributes(np@network)
+        required_attrs <- c("Network..Is.fake")
+        expect_true(sum(v_attrs %in% required_attrs)==length(required_attrs))
+    }
+}
 
 sample_NetworkPlan <- function() { 
     coords <- matrix(runif(20, min=-1.0, max=1.0), nrow=10, ncol=2)
@@ -53,8 +52,8 @@ sample_NetworkPlan <- function() {
     dir_mst <- dir_mst_dom$domtree
 
     roots <- as.numeric(V(dir_mst)[degree(dir_mst, mode="in")==0])
-    V(dir_mst)$Sequence..Is.root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
-    V(dir_mst)$Sequence..Is.fake <- FALSE
+    V(dir_mst)$Network..Is.root <- ifelse(V(dir_mst) %in% roots,  TRUE, FALSE)
+    V(dir_mst)$Network..Is.fake <- FALSE
 
     # There's no existing_network in this plan
     list(nodes=sp_df, np=new("NetworkPlan", network=dir_mst))
@@ -102,7 +101,7 @@ simple_coords_lines <- function() {
     line_matrix[3,,] <- xys[3:4,]
     line_matrix[4,,] <- xys[c(3,5),]
 
-    list(coord_df=coord_df, line_matrix=line_matrix)
+    list(coord_df=coord_df, xys=xys, line_matrix=line_matrix)
 }
 
 simple_NetworkPlan <- function() {
@@ -120,12 +119,76 @@ simple_NetworkPlan <- function() {
     V(dir_network)$Y <- coord_df$Y
 
     roots <- as.numeric(V(dir_network)[degree(dir_network, mode="in")==0])
-    V(dir_network)$Sequence..Is.root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
-    V(dir_network)$Sequence..Is.fake <- FALSE
+    V(dir_network)$Network..Is.root <- ifelse(V(dir_network) %in% roots,  TRUE, FALSE)
+    V(dir_network)$Network..Is.fake <- FALSE
 
     new("NetworkPlan", network=dir_network)
 }
 
+unsequencable_NetworkPlan <- function() {
+    coords_lines <- simple_coords_lines()
+    line_matrix <- coords_lines$line_matrix
+    xys <- coords_lines$xys
+    # add a loop to the lines
+    line_matrix_loop <- array(0, dim=c(5, 2, 2))
+    line_matrix_loop[1:4,,] <- line_matrix[1:4,,]
+    line_matrix_loop[5,,] <- xys[c(5,2),]
+    coord_df <- coords_lines$coord_df
+    sample_pop <- floor(runif(nrow(coord_df), min=0, max=1000))
+    coord_attrs <- data.frame(id=coord_df$id, population=sample_pop)
+    sp_df <- SpatialPointsDataFrame(cbind(coord_df$X, coord_df$Y), coord_attrs, proj4string=proj4str)
+    adj_mat <- get_adjacency_matrix(line_matrix_loop, coord_df)
+    network <- graph.adjacency(adj_mat, mode="undirected")
+    V(network)$population <- sample_pop
+    V(network)$X <- coord_df$X
+    V(network)$Y <- coord_df$Y
+
+    V(network)$Network..Is.fake <- FALSE
+    # Add fake nodes that are connected
+    V(network)[c(1, 4)]$Network..Is.fake <- TRUE
+
+    new("NetworkPlan", network=network)
+}
+
+test_that("detect unsequenceable networkplan", {
+
+    un_np <- unsequencable_NetworkPlan()
+    expect_false(can_sequence(un_np))
+    
+    # clean it up so it should be sequenceable
+    clean_np <- clean_networkplan(un_np)
+    expect_true(can_sequence(clean_np))
+
+})
+
+test_that("mapping graph edge attributes works", {
+    
+    # test that we can map edge attributes from a simple graph: 
+    # 1-2, 2-3, 3-4
+    # to an alternative graph: 
+    # 4->3, 3->2, 2->1
+      
+    adj_mat <- matrix(nrow=4, ncol=4)
+    adj_mat[,] <- FALSE
+    rev_mat <- adj_mat
+    adj_mat[cbind(c(1, 2, 3), c(2, 3, 4))] <- TRUE
+    rev_mat[cbind(c(4, 3, 2), c(3, 2, 1))] <- TRUE
+
+    original <- graph.adjacency(adj_mat, mode="undirected")
+    alternate <- graph.adjacency(rev_mat, mode="directed")
+    
+    o_edge_df <- get.data.frame(original, what="edges")
+    E(original)$edge_name <- str_c(o_edge_df$from, "-", o_edge_df$to)
+    
+    # create id map of old index to new
+    id_map <- c(4, 3, 2, 1)
+    
+    mapped <- map_edge_attributes(original, alternate, id_map)
+    orig_names <- original[from=c(1, 2, 3), to=c(2, 3, 4), attr="edge_name"]
+    alt_names <- mapped[from=c(4, 3, 2), to=c(3, 2, 1), attr="edge_name"]
+    expect_equal(orig_names, alt_names)
+})
+    
 
 test_that("get adjacency matrix is correct", {
      
@@ -183,6 +246,7 @@ test_that("reading and sequencing scenario 108 works", {
     # same as above, but with scenario 108
     scenario_dir <- str_c(test_data_dir, '108')
     np <- read_networkplan(scenario_dir)
+    np <- directed_networkplan(np) 
 
      # define simple sequence model
     sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$Pop)) }
@@ -201,7 +265,7 @@ test_that("reading and sequencing scenario 108 works", {
     edge_verts <- c(edge_df$from, edge_df$to)
     vert_df <- vert_df[1:nrow(vert_df) %in% edge_verts,]
     # filter out fake nodes
-    real_vert_df <- subset(vert_df, subset=!Sequence..Is.fake)
+    real_vert_df <- subset(vert_df, subset=!Network..Is.fake)
     sorted_df <- real_vert_df[with(real_vert_df, order(Sequence..Far.sighted.sequence)),]
     sum_pop_by_seq <- sorted_df$sum_pop
     sum_pop_desc <- sort(real_vert_df$sum_pop, decreasing=TRUE)

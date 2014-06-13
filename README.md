@@ -44,7 +44,7 @@ Sample plotting code
 # assumes np is a sequenced NetworkPlan object
 # Setup graph for plotting by coloring roots red and labeling
 # vertices by their Far.sighted.sequence value
-V(np@network)[V(np@network)$Sequence..Is.root]$color <- "red"
+V(np@network)[V(np@network)$Network..Is.root]$color <- "red"
 vertex_labels <- get.vertex.attribute(np@network, "Sequence..Far.sighted.sequence")
 plot(np@network, vertex.size=4, edge.arrow.size=1, vertex.label=vertex_labels)
 ```
@@ -64,8 +64,8 @@ The following are standard fields that are added to a NetworkPlan upon
 creation:  
 
 - Vertex Attributes:   
-  `Sequence..Is.root`:  Whether this vertex is a "Sequence root"  
-  `Sequence..Is.fake`:  Whether this vertex is a "Fake" node  
+  `Network..Is.root`:  Whether this vertex is a "Sequence root"  
+  `Network..Is.fake`:  Whether this vertex is a "Fake" node  
 
 - Edge Attributes:  
   `FID`:  The FID of the corresponding record in the original existing network 
@@ -104,7 +104,7 @@ trees:
   Vertices that represent the shortest connection from a settlement to an 
   existing network as created by Network Planner.  
   
-  These vertices can be found via `V(network)[V(network)$Sequence..Is.fake]`
+  These vertices can be found via `V(network)[V(network)$Network..Is.fake]`
 
 2.  "Selected" vertices:  
 
@@ -112,7 +112,7 @@ trees:
   (i.e. have no "Fake" vertex), a root is selected which represents the
   node with maximal demand (we may make this customizable going forward)
 
-"Sequence root" vertices can be found via `V(network)[V(network)$Sequence..Is.root]`
+"Network root" vertices can be found via `V(network)[V(network)$Network..Is.root]`
 These are not necessarily the same as the roots of a tree/subnetwork since 
 "Fake" vertices are not considered true roots for sequencing purposes as
 there is no settlement associated with a "Fake" vertex.
