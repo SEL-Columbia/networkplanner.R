@@ -18,6 +18,14 @@ pop_select_max <- function(df) {
 pop_sequence_model <- list(accumulator=pop_accumulate,
                            selector=pop_select_max)
 
+# Now create directed graph from "fake" nodes (for trees connected
+# to the existing network) and "roots" (for trees that are NOT connected)
+# Root selector selects nodes for disconnected components
+mv_v_dmd_root_selector <- function(g) {
+    demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
+    root_index <- which(demands==max(demands))[1]
+}
+
 # Model for computing downstream MV Line per kwh
 # and sequencing by selecting the nodes with min values first
 #' helper function
@@ -27,7 +35,7 @@ mv_v_dmd_get_upstream_edge_fields <- function(g, vid) {
     par <- V(g)[ nei(vid, mode="in") ]
     if(length(par)) {
         distance <- E(g)[ par %->% vid ]$distance
-        fid <- E(g)[ par %->% vid ]$ID
+        id <- E(g)[ par %->% vid ]$ID
     } 
     l <- list(distance=distance, ID=id)
     l

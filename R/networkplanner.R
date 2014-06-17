@@ -96,20 +96,21 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
 }
 
 #' Read scenario from a directory in the filesystem and
-#' create it's NetworkPlan.  
-#' tl;dr:  Converts scenario into an igraph object
+#' create it's NetworkPlan.  Converts scenario into an igraph object
 #' 
 #' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
-#' @param debug if TRUE, will verify inputs and run failsafes
 #' @return A NetworkPlan object
 #' @export
-read_networkplan <- function(directory_name, debug=F) {
+read_networkplan <- function(directory_name) {
     base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # read nodes and assign id
     metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
     proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
     
+    # check metrics_df for valid X,Y fields
+    stopifnot(all(c("X", "Y") %in% names(metrics_df)))
+
     # read network
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
      
@@ -138,7 +139,8 @@ read_networkplan <- function(directory_name, debug=F) {
     # NOTE:  nid is the id of the relevant metrics-local node
     #        if the vertex doesn't have one it's "fake"
     V(network)$Network..Is.fake <- is.na(V(network)$nid)
- 
+    network <- assign_weights(network, weight_field="distance", proj4string)
+
     # Remove temp vertex attributes
     network <- remove.vertex.attribute(network, "nid") 
 
@@ -164,7 +166,7 @@ clean_networkplan <- function(np) {
     network <- simplify(network, remove.loops=TRUE)
     # Take the min span of components in case there are any cycles remaining in them
     # (can occur when scenarios are merged)
-    network <- min_span_components(network, proj4string)
+    network <- min_span_components(network, np@proj)
 
     # map the original edge attributes back
     # create the original -> new graph vertex mapping
@@ -173,32 +175,31 @@ clean_networkplan <- function(np) {
     
     # remove temp attrs
     mapped <- remove.vertex.attribute(mapped, "orig_v_id") 
+    mapped <- remove.edge.attribute(mapped, "weight") 
     
     np@network <- mapped
     np
 }
 
-  
+# Just choose the 1st vertex for now
+default_root_selector <- function(graph) {
+    as.numeric(V(graph)[1])
+}
+
+
 #' Take an undirected NetworkPlan and make it "directed"
 #' such that all components are trees with directed edges
 #' to all vertices from the root
 #' 
 #' @param np A NetworkPlan
 #' @return A new "directed" NetworkPlan object
-directed_networkplan <- function(np) {
+directed_networkplan <- function(np, subnet_root_selector=default_root_selector) {
 
     # Keep original network and retain the original vertex id
     # so that we can merge back once the directed trees have been created
     original <- np@network
     V(original)$orig_v_id <- 1:length(V(original))
 
-    # Now create directed graph from "fake" nodes (for trees connected
-    # to the existing network) and "roots" (for trees that are NOT connected)
-    # Root selector selects nodes for disconnected components
-    subnet_root_selector <- function(g) {
-        demands <- V(g)$"Demand...Projected.nodal.demand.per.year"
-        root_index <- which(demands==max(demands))[1]
-    }
     network <- create_directed_trees(original, root_selector=subnet_root_selector)
  
     # map the original edge attributes back
@@ -207,9 +208,11 @@ directed_networkplan <- function(np) {
     mapped <- map_edge_attributes(original, network, orig_new_v_map)
     
     # remove temp attrs
-    mapped <- remove.vertex.attribute(mapped, "vid") 
     mapped <- remove.vertex.attribute(mapped, "orig_v_id") 
-    
+    if("vid" %in% list.vertex.attributes(mapped)) { 
+        mapped <- remove.vertex.attribute(mapped, "vid") 
+    }
+
     np@network <- mapped
     np
 }
@@ -246,9 +249,13 @@ default_accumulator <- function(node_df, edge_df, g, vid) {
 #' @return A NetworkPlan whose nodes SpatialPointsDataFrame has a sequence 
 #'         column and values
 #' @export
-setGeneric("sequence_plan", function(np, selector=default_selector) standardGeneric("sequence_plan"))
+setGeneric("sequence_plan", function(np, selector=default_selector, validate=F) standardGeneric("sequence_plan"))
 setMethod("sequence_plan", signature(np="NetworkPlan"), 
-    function(np, selector=default_selector) {
+    function(np, selector=default_selector, validate=F) {
+
+        if(validate) {
+            stopifnot(can_sequence(np))
+        }
 
         nodes <- get.data.frame(np@network, what="vertices")
         edges <- get.data.frame(np@network, what="edges")
@@ -304,13 +311,18 @@ setMethod("sequence_plan", signature(np="NetworkPlan"),
 #' @param np a NetworkPlan
 #' @param accumulator function that summarizes or combines all downstream
 #'        node values into a new row dataframe attributed to "this" node
-#'        the accumulator take
+#'        the accumulator function takes node and edge dataframes along with 
+#'        the graph and vertex id of the current node
 #' @return A NetworkPlan whose network vertices and their associated upstream
 #'         edges have new attributes/values as defined by accumulator
 #' @export
-setGeneric("accumulate", function(np, accumulator=default_accumulator) standardGeneric("accumulate"))
+setGeneric("accumulate", function(np, accumulator=default_accumulator, validate=F) standardGeneric("accumulate"))
 setMethod("accumulate", signature(np="NetworkPlan"), 
-    function(np, accumulator=default_accumulator) {
+    function(np, accumulator=default_accumulator, validate=F) {
+
+        if(validate) {
+            stopifnot(can_sequence(np))
+        }
 
         # get.data.frame returns vertices ordered by vertex id
         nodes_edges <- get.data.frame(np@network, what="both")
@@ -372,8 +384,7 @@ is_valid_networkplan <- function(np) {
     }
     if(length(V(np@network))) {
         v_attrs <- list.vertex.attributes(np@network)
-        required_attrs <- c("Network..Is.root", 
-                            "Network..Is.fake")
+        required_attrs <- c("Network..Is.fake")
         if(sum(v_attrs %in% required_attrs)!=length(required_attrs)) {
             message("NetworkPlan missing required attributes")
             return(FALSE)
@@ -392,20 +403,28 @@ is_valid_networkplan <- function(np) {
 #' @export
 can_sequence = function(np) {
 
-    # Ensure that there are no paths between fake nodes
-    fake_vids <- as.numeric(V(np@network)[V(np@network)$Network..Is.fake])
-    # create all vertex pairs that we need to check for paths
-    set_of_pairs <- t(combn(fake_vids, 2))
-    # function to get num_paths between pair of vertices (used within apply below)
-    get_num_paths <- function(row) {
-        edge.connectivity(np@network, row[1], row[2])
-    }
-    num_paths <- apply(set_of_pairs, 1, get_num_paths)
-    if(any(num_paths > 0)) {
-        message("NetworkPlan contains paths between fake nodes")
+    # Ensure that the graph is directed
+    if(!is.directed(np@network)) {
+        message("NetworkPlan graph is not directed")
         return(FALSE)
     }
-   
+
+    # Ensure that there are no paths between fake nodes
+    fake_vids <- as.numeric(V(np@network)[V(np@network)$Network..Is.fake])
+    if (length(fake_vids) > 0) {
+        # create all vertex pairs that we need to check for paths
+        set_of_pairs <- t(combn(fake_vids, 2))
+        # function to get num_paths between pair of vertices (used within apply below)
+        get_num_paths <- function(row) {
+            edge.connectivity(np@network, row[1], row[2])
+        }
+        num_paths <- apply(set_of_pairs, 1, get_num_paths)
+        if(any(num_paths > 0)) {
+            message("NetworkPlan contains paths between fake nodes")
+            return(FALSE)
+        }
+    }
+       
     # Now check whether each component is a tree
     # (each node must have one incoming edge except the root node)
     components <- decompose.graph(np@network)
@@ -448,11 +467,11 @@ write.NetworkPlan = function(np, directory_name,
 
     # output files based on choice 
     if (nodeFormat == 'csv'){
-        csv_dir <- file.path(base_dir, "metrics-local-sequenced.csv")
+        csv_dir <- file.path(base_dir, "networkplan-vertices.csv")
         write.csv(output_df, csv_dir, row.names=FALSE)    
     }
     if (edgeFormat =='shp'){
-        spldf_dir <- file.path(base_dir, "proposed-sequenced")
+        spldf_dir <- file.path(base_dir, "networkplan-edges")
         writeLinesShape(output_spldf, spldf_dir)    
     }   
     
@@ -474,15 +493,20 @@ default_sequence_model <- list(accumulator=default_accumulator,
 #'        accumulator function to accumulate downstream values (see \code{accumulate})
 #'        accumulator_field name of attribute for accumulated value to go in vertices and edges
 #'        selector function to perform sequencing (see \code{sequence_plan})
+#' @param validate whether to check if the networkplan can be sequenced
 #' @return A NetworkPlan whose network vertices have a sequence value based
 #'         on the rollout_functions.  The edges of the network should also
 #'         have the accumulated_field set to the appropriate value.
 #' @seealso \code{\link{sequence_plan}}
 #' @seealso \code{\link{accumulate}}
 #' @export
-setGeneric("sequence_plan_far", function(np, sequence_model=default_sequence_model) standardGeneric("sequence_plan_far"))
-setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"), 
-    function(np, sequence_model=default_sequence_model) {
+setGeneric("sequence_plan_far", function(np, sequence_model=default_sequence_model, validate=T) standardGeneric("sequence_plan_far"))
+setMethod("sequence_plan_far", signature(np="NetworkPlan"), 
+    function(np, sequence_model=default_sequence_model, validate=T) {
+
+        if(validate) {
+            stopifnot(can_sequence(np))
+        }
 
         selector <- sequence_model$selector
         accumulator <- sequence_model$accumulator
@@ -493,7 +517,7 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan", sequence_model="list"
         # sequence it via the sequence_selector and return 
         np <- sequence_plan(np, selector=selector)
         
-        #now add sequence number to edges
+        # now add sequence number to edges
         real_nodes <- which(degree(np@network, mode="in")!=0)
         E(np@network)[ to(real_nodes) ]$Sequence..Far.sighted.sequence <- V(np@network)[real_nodes]$Sequence..Far.sighted.sequence
         np

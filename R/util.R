@@ -1,6 +1,6 @@
 ## dist_fun -- we take in 2 vectors (1 & 2) of vertices on a network
 ## the distance from vertices 1 to the respective vertices 2 is calculated and returned as a single vector 
-dist_fun <- function(points_1, points_2, projection_type="")
+dist_fun <- function(points_1, points_2, projection_type="+proj=longlat +datum=WGS84 +ellps=WGS84")
 {
   #TODO:  more rigorous check on projections (i don't know if 'utm' is sufficient)
   if(grepl("utm", projection_type))
@@ -191,12 +191,13 @@ assign_weights <- function(network, weight_field="distance", proj4string="") {
     new_edges <- merge(new_edges, nodes_xyv, by.x="to", by.y="vid", all.x=TRUE)
     new_edges[,weight_field] <- dist_fun(new_edges[,c("X.x","Y.x")], new_edges[,c("X.y","Y.y")], proj4string)
 
-    new_edges <- new_edges[,c("from", "to", weight_field)]
+    edge_names <- setdiff(names(new_edges), c("X.x", "Y.x", "X.y", "Y.y"))
+    new_edges <- new_edges[,edge_names]
     vertex_names <- c(c("vid"), setdiff(names(nodes), c("vid")))
     nodes <- nodes[,vertex_names]
 
     g <- graph.data.frame(new_edges, directed=is.directed(network), nodes)
-    # get rid of the name attribute as this leads to confusion
+    # get rid of the name attribute as named vertices are confusing
     g <- remove.vertex.attribute(g, "name")
     g
 }
@@ -348,11 +349,6 @@ separate_subgraphs <- function(network) {
     l
 }
  
-# Just choose the 1st vertex for now
-default_root_selector <- function(graph) {
-    as.numeric(V(graph)[1])
-}
-
 # From full graph with undirected edges and node ids (i.e. that 
 # returned by create_graph), create directed graph with "fake" nodes and
 # "root" nodes
@@ -528,7 +524,7 @@ select_edge_for_removal <- function(network, path) {
     
 # Ensure we have minimum spanning trees of each component of 
 # the graph (weighted by distance), return new graph
-min_span_components <- function(network, proj4string="") {
+min_span_components <- function(network, proj4string="+proj=longlat +datum=WGS84 +ellps=WGS84") {
 
     weighted <- assign_weights(network, weight_field="weight", proj4string)
     components <- decompose.graph(weighted)
