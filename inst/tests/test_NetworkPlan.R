@@ -136,6 +136,7 @@ unsequencable_NetworkPlan <- function() {
     coord_df <- coords_lines$coord_df
     sample_pop <- floor(runif(nrow(coord_df), min=0, max=1000))
     coord_attrs <- data.frame(id=coord_df$id, population=sample_pop)
+    # using proj4str which is latlon, so distances will be pretty large
     sp_df <- SpatialPointsDataFrame(cbind(coord_df$X, coord_df$Y), coord_attrs, proj4string=proj4str)
     adj_mat <- get_adjacency_matrix(line_matrix_loop, coord_df)
     network <- graph.adjacency(adj_mat, mode="undirected")
@@ -147,7 +148,7 @@ unsequencable_NetworkPlan <- function() {
     # Add fake nodes that are connected
     V(network)[c(1, 4)]$Network..Is.fake <- TRUE
 
-    new("NetworkPlan", network=network)
+    new("NetworkPlan", network=network, proj=proj4str@projargs)
 }
 
 test_that("detect unsequenceable networkplan", {
@@ -155,9 +156,10 @@ test_that("detect unsequenceable networkplan", {
     un_np <- unsequencable_NetworkPlan()
     expect_false(can_sequence(un_np))
     
-    # clean it up so it should be sequenceable
+    # clean it up and make directed so it should be sequenceable
     clean_np <- clean_networkplan(un_np)
-    expect_true(can_sequence(clean_np))
+    directed_np <- directed_networkplan(clean_np) 
+    expect_true(can_sequence(directed_np))
 
 })
 
@@ -226,6 +228,8 @@ test_that("sequence_plan_far works", {
 
     np <- simple_NetworkPlan()
 
+    # make it directed (use defaults)
+    np <- directed_networkplan(np) 
     # define simple sequence model
     sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$population)) }
     pop_selector <- function(df) {
@@ -246,7 +250,8 @@ test_that("reading and sequencing scenario 108 works", {
     # same as above, but with scenario 108
     scenario_dir <- str_c(test_data_dir, '108')
     np <- read_networkplan(scenario_dir)
-    np <- directed_networkplan(np) 
+    expect_true(is_valid_networkplan(np))
+    np <- directed_networkplan(np, subnet_root_selector=mv_v_dmd_root_selector) 
 
      # define simple sequence model
     sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$Pop)) }
@@ -271,5 +276,4 @@ test_that("reading and sequencing scenario 108 works", {
     sum_pop_desc <- sort(real_vert_df$sum_pop, decreasing=TRUE)
     expect_equal(sum(sum_pop_by_seq==sum_pop_desc), nrow(real_vert_df))
 })
-
 

@@ -64,8 +64,8 @@ The following are standard fields that are added to a NetworkPlan upon
 creation:  
 
 - Vertex Attributes:   
-  `Network..Is.root`:  Whether this vertex is a "Sequence root"  
   `Network..Is.fake`:  Whether this vertex is a "Fake" node  
+  `Network..Is.root`:  Whether this vertex is a "Sequence root" (only available if 'directed')
 
 - Edge Attributes:  
   `FID`:  The FID of the corresponding record in the original existing network 
