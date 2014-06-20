@@ -101,27 +101,25 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
 #' @param directory_name absolute or relative path to a directory from which a NetworkPlan is loaded
 #' @return A NetworkPlan object
 #' @export
-setGeneric("read_networkplan", function(directory_name) standardGeneric("read_networkplan"))
-setMethod("read_networkplan", signature(directory_name="character"), 
-    function(directory_name) {
+read_networkplan <- function(directory_name) {
 
-        base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
-        
-        # read nodes and assign id
-        metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
-        proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
-        
-        # check metrics_df for valid X,Y fields
-        stopifnot(all(c("X", "Y") %in% names(metrics_df)))
+    base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
+    
+    # read nodes and assign id
+    metrics_df <- read.csv(file.path(base_dir, "metrics-local.csv"), skip=1)
+    proj4string <- str_extract(readLines(file.path(base_dir, "metrics-local.csv"), n=1), "[+][^,]*")
+    
+    # check metrics_df for valid X,Y fields
+    stopifnot(all(c("X", "Y") %in% names(metrics_df)))
 
-        # read network
-        network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
-         
-        # make sure projections match (we match metrics and network on coordinates)
-        stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
-        read_networkplan(metrics_df, network_shp, proj4string)
-    }
-)
+    # read network
+    network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
+     
+    # make sure projections match (we match metrics and network on coordinates)
+    stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
+    create_networkplan(metrics_df, network_shp, proj4string)
+}
+
 
 #' Create a NetworkPlan from the components of a scenario
 #' 
@@ -132,43 +130,38 @@ setMethod("read_networkplan", signature(directory_name="character"),
 #' @param proj4string string representing the projection (in proj4 format)
 #' @return A NetworkPlan object
 #' @export
-setGeneric("read_networkplan", function(metrics_df, proposed_network_df, proj4string) standardGeneric("read_networkplan"))
-setMethod("read_networkplan", signature(metrics_df="data.frame", 
-                                        proposed_network_df="SpatialLinesDataFrame",
-                                        proj4string="character" ), 
-    function(metrics_df, proposed_network_df, proj4string) {
+create_networkplan <- function(metrics_df, proposed_network_df, proj4string) {
 
-        segments_ids <- decompose_spatial_lines(proposed_network_df)
-        network <- create_graph(metrics_df, segments_ids$segments, segments_ids$ids) 
-        
-        # At this point the network edges should only have the ID attribute from the network shapefile
-        # So, assign the rest of the shapefile attributes to the network
-        field_names <- names(proposed_network_df@data)
-        edge_df <- get.data.frame(network, what="edges")
+    segments_ids <- decompose_spatial_lines(proposed_network_df)
+    network <- create_graph(metrics_df, segments_ids$segments, segments_ids$ids) 
+    
+    # At this point the network edges should only have the ID attribute from the network shapefile
+    # So, assign the rest of the shapefile attributes to the network
+    field_names <- names(proposed_network_df@data)
+    edge_df <- get.data.frame(network, what="edges")
 
-        # Assumes that ID can be used as an index into the data.frame via ID+1
-        edge_df[, field_names] <- proposed_network_df@data[edge_df$ID+1, field_names]
-        # is there a better way to merge in all edge fields?  
-        for(nm in field_names) {
-            vec <- edge_df[,nm]
-            # more ugliness (how to deal w/ factors nicely?)
-            if(class(vec)=="factor") { vec <- as.character(vec) }
-            network[from=edge_df$from, to=edge_df$to, attr=nm] <- vec
-        }
-
-        # assign "Network" attributes
-        # NOTE:  nid is the id of the relevant metrics-local node
-        #        if the vertex doesn't have one it's "fake"
-        V(network)$Network..Is.fake <- is.na(V(network)$nid)
-        network <- assign_weights(network, weight_field="distance", proj4string)
-
-        # Remove temp vertex attributes
-        network <- remove.vertex.attribute(network, "nid") 
-
-        ## Return the NetworkPlan
-        new("NetworkPlan", network=network, proj=proj4string)
+    # Assumes that ID can be used as an index into the data.frame via ID+1
+    edge_df[, field_names] <- proposed_network_df@data[edge_df$ID+1, field_names]
+    # is there a better way to merge in all edge fields?  
+    for(nm in field_names) {
+        vec <- edge_df[,nm]
+        # more ugliness (how to deal w/ factors nicely?)
+        if(class(vec)=="factor") { vec <- as.character(vec) }
+        network[from=edge_df$from, to=edge_df$to, attr=nm] <- vec
     }
-)
+
+    # assign "Network" attributes
+    # NOTE:  nid is the id of the relevant metrics-local node
+    #        if the vertex doesn't have one it's "fake"
+    V(network)$Network..Is.fake <- is.na(V(network)$nid)
+    network <- assign_weights(network, weight_field="distance", proj4string)
+
+    # Remove temp vertex attributes
+    network <- remove.vertex.attribute(network, "nid") 
+
+    ## Return the NetworkPlan
+    new("NetworkPlan", network=network, proj=proj4string)
+}
 
 #' Take an undirected NetworkPlan and return one that 
 #' guarantees that fake nodes belong to disjoint components
