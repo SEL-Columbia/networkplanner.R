@@ -116,7 +116,10 @@ read_networkplan <- function(directory_name) {
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
      
     # make sure projections match (we match metrics and network on coordinates)
-    stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
+    proj_equal <- function(proj4_a, proj4_b) {
+       str_extract(proj4_a, "[+]proj[^ ]*")==str_extract(proj4_b, "[+]proj[^ ]*") 
+    }
+    stopifnot(proj_equal(proj4string, network_shp@proj4string@projargs))
     create_networkplan(metrics_df, network_shp, proj4string)
 }
 
