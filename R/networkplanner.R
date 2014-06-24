@@ -362,6 +362,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
             # now call accumulator callback
             accumulator(down_nodes, down_edges, np@network, df$vid)
         }
+
         # get new dataframe of accumulator results 
         result_nodes <- ddply(real_nodes, .(vid), apply_to_down_nodes)
 
@@ -521,6 +522,10 @@ default_sequence_model <- list(accumulator=default_accumulator,
 setGeneric("sequence_plan_far", function(np, sequence_model=default_sequence_model, validate=T) standardGeneric("sequence_plan_far"))
 setMethod("sequence_plan_far", signature(np="NetworkPlan"), 
     function(np, sequence_model=default_sequence_model, validate=T) {
+
+        if(!is.directed(np@network)) {
+            np <- directed_networkplan(np)
+        }
 
         if(validate) {
             stopifnot(can_sequence(np))

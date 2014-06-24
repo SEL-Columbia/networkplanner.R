@@ -81,6 +81,7 @@ mv_v_dmd_select_min <- function(df) {
        (min(df$Sequence..Downstream.distance.sum.m.per.downstream.demand.sum.kwh) == 
             df$Sequence..Downstream.distance.sum.m.per.downstream.demand.sum.kwh))
 }
+
 #' @export
 mv_v_dmd_sequence_model <- list(accumulator=mv_v_dmd_accumulate,
                                 selector=mv_v_dmd_select_min)
