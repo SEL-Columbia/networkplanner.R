@@ -456,7 +456,7 @@ can_sequence = function(np) {
 }
 
 
-#' Write line shapfile from networkplan object into the given directory
+#' Write line shapefile from networkplan object into the given directory
 #'
 #' @param np a NetworkPlan
 #' @param directory_name path to write the downloaded scenario into. By default,
@@ -469,7 +469,7 @@ can_sequence = function(np) {
 #' @param includeFake a boolean indicating whether to output the fake node in the 
 #' vertex/node csv file, Default is set to False
 #' @export
-write.NetworkPlan = function(np, directory_name, 
+write.NetworkPlan <- function(np, directory_name, 
                              nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
     
     base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
@@ -496,6 +496,23 @@ write.NetworkPlan = function(np, directory_name,
     
 }
 
+#' Extract spatialpoint and spatialline dataframes for vertices and edges
+#'
+#' @param np a NetworkPlan
+#' @return a list with vertices spatialdataframe and edges spatiallinesdataframe
+as_spatial_dataframes <- function(np) {
+
+    vertices_spdf <- get.data.frame(np@network, what="vertices")
+    coordinates(node_spdf) <- ~X + Y
+    vertices_spdf@proj4string <- CRS(np@proj)
+
+    edges_spldf <- get_edge_spldf(np)
+    edges_spldf@proj4string <- CRS(np@proj)
+    
+    list(vertices=vertices_spdf, edges=edges_spldf)
+}
+
+   
 #' Default rollout_functions for sequence_plan_far
 default_sequence_model <- list(accumulator=default_accumulator, 
                                selector=default_selector)
