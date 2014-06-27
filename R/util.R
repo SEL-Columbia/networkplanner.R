@@ -340,7 +340,11 @@ create_graph <- function(metrics_df, segment_matrix, ids, proj4string="+proj=lon
 # disconnected:  The graph that is not reachable from "fake" nodes
 separate_subgraphs <- function(network) {
     fake_vids <- as.numeric(V(network)[V(network)$Network..Is.fake])
-    reachable <- unique(do.call(c, lapply(fake_vids, function(x) { subcomponent(network, x, mode="ALL") })))
+    reachable <- unique(unlist(sapply(fake_vids, 
+      function(x) { 
+        subcomponent(network, x, mode="ALL") 
+      })))
+   
     connected_subgraph <- induced.subgraph(network, reachable)
     unreachable <- setdiff(as.numeric(V(network)), reachable)
     disconnected_subgraph <- induced.subgraph(network, unreachable)

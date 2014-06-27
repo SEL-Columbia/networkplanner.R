@@ -500,10 +500,11 @@ write.NetworkPlan <- function(np, directory_name,
 #'
 #' @param np a NetworkPlan
 #' @return a list with vertices spatialdataframe and edges spatiallinesdataframe
+#' @export
 as_spatial_dataframes <- function(np) {
 
     vertices_spdf <- get.data.frame(np@network, what="vertices")
-    coordinates(node_spdf) <- ~X + Y
+    coordinates(vertices_spdf) <- ~X + Y
     vertices_spdf@proj4string <- CRS(np@proj)
 
     edges_spldf <- get_edge_spldf(np)
