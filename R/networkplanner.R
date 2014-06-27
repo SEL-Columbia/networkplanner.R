@@ -102,6 +102,7 @@ download_scenario <- function(scenario_number, directory_name=NULL, username=NUL
 #' @return A NetworkPlan object
 #' @export
 read_networkplan <- function(directory_name) {
+
     base_dir = R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # read nodes and assign id
@@ -115,18 +116,35 @@ read_networkplan <- function(directory_name) {
     network_shp <- readOGR(dsn=base_dir, layer="networks-proposed")
      
     # make sure projections match (we match metrics and network on coordinates)
-    stopifnot(str_extract(proj4string, "[+]proj[^ ]*")==str_extract(network_shp@proj4string@projargs, "[+]proj[^ ]*"))
+    proj_equal <- function(proj4_a, proj4_b) {
+       str_extract(proj4_a, "[+]proj[^ ]*")==str_extract(proj4_b, "[+]proj[^ ]*") 
+    }
+    stopifnot(proj_equal(proj4string, network_shp@proj4string@projargs))
+    create_networkplan(metrics_df, network_shp, proj4string)
+}
 
-    segments_ids <- decompose_spatial_lines(network_shp)
+
+#' Create a NetworkPlan from the components of a scenario
+#' 
+#' @param metrics_df a dataframe corresponding to the metrics-local output of 
+#'        a scenario
+#' @param proposed_network_df SpatialLinesDataFrame corresponding to the 
+#'        proposed network output of a scenario
+#' @param proj4string string representing the projection (in proj4 format)
+#' @return A NetworkPlan object
+#' @export
+create_networkplan <- function(metrics_df, proposed_network_df, proj4string) {
+
+    segments_ids <- decompose_spatial_lines(proposed_network_df)
     network <- create_graph(metrics_df, segments_ids$segments, segments_ids$ids) 
     
     # At this point the network edges should only have the ID attribute from the network shapefile
     # So, assign the rest of the shapefile attributes to the network
-    field_names <- names(network_shp@data)
+    field_names <- names(proposed_network_df@data)
     edge_df <- get.data.frame(network, what="edges")
 
     # Assumes that ID can be used as an index into the data.frame via ID+1
-    edge_df[, field_names] <- network_shp@data[edge_df$ID+1, field_names]
+    edge_df[, field_names] <- proposed_network_df@data[edge_df$ID+1, field_names]
     # is there a better way to merge in all edge fields?  
     for(nm in field_names) {
         vec <- edge_df[,nm]
@@ -344,6 +362,7 @@ setMethod("accumulate", signature(np="NetworkPlan"),
             # now call accumulator callback
             accumulator(down_nodes, down_edges, np@network, df$vid)
         }
+
         # get new dataframe of accumulator results 
         result_nodes <- ddply(real_nodes, .(vid), apply_to_down_nodes)
 
@@ -437,7 +456,7 @@ can_sequence = function(np) {
 }
 
 
-#' Write line shapfile from networkplan object into the given directory
+#' Write line shapefile from networkplan object into the given directory
 #'
 #' @param np a NetworkPlan
 #' @param directory_name path to write the downloaded scenario into. By default,
@@ -450,7 +469,7 @@ can_sequence = function(np) {
 #' @param includeFake a boolean indicating whether to output the fake node in the 
 #' vertex/node csv file, Default is set to False
 #' @export
-write.NetworkPlan = function(np, directory_name, 
+write.NetworkPlan <- function(np, directory_name, 
                              nodeFormat='csv', edgeFormat='shp', includeFake=FALSE) {
     
     base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
@@ -477,6 +496,24 @@ write.NetworkPlan = function(np, directory_name,
     
 }
 
+#' Extract spatialpoint and spatialline dataframes for vertices and edges
+#'
+#' @param np a NetworkPlan
+#' @return a list with vertices spatialdataframe and edges spatiallinesdataframe
+#' @export
+as_spatial_dataframes <- function(np) {
+
+    vertices_spdf <- get.data.frame(np@network, what="vertices")
+    coordinates(vertices_spdf) <- ~X + Y
+    vertices_spdf@proj4string <- CRS(np@proj)
+
+    edges_spldf <- get_edge_spldf(np)
+    edges_spldf@proj4string <- CRS(np@proj)
+    
+    list(vertices=vertices_spdf, edges=edges_spldf)
+}
+
+   
 #' Default rollout_functions for sequence_plan_far
 default_sequence_model <- list(accumulator=default_accumulator, 
                                selector=default_selector)
@@ -503,6 +540,10 @@ default_sequence_model <- list(accumulator=default_accumulator,
 setGeneric("sequence_plan_far", function(np, sequence_model=default_sequence_model, validate=T) standardGeneric("sequence_plan_far"))
 setMethod("sequence_plan_far", signature(np="NetworkPlan"), 
     function(np, sequence_model=default_sequence_model, validate=T) {
+
+        if(!is.directed(np@network)) {
+            np <- directed_networkplan(np)
+        }
 
         if(validate) {
             stopifnot(can_sequence(np))

@@ -228,8 +228,6 @@ test_that("sequence_plan_far works", {
 
     np <- simple_NetworkPlan()
 
-    # make it directed (use defaults)
-    np <- directed_networkplan(np) 
     # define simple sequence model
     sum_pop <- function(node_df, edge_df, g, vid) { data.frame(sum_pop=sum(node_df$population)) }
     pop_selector <- function(df) {

@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+<title>Example Usage of networkplanner R library</title>
+
+
+
+
+
+<style type="text/css">
+body, td {
+   font-family: sans-serif;
+   background-color: white;
+   font-size: 13px;
+}
+
+body {
+  max-width: 800px;
+  margin: auto;
+  padding: 1em;
+  line-height: 20px;
+}
+
+tt, code, pre {
+   font-family: 'DejaVu Sans Mono', 'Droid Sans Mono', 'Lucida Console', Consolas, Monaco, monospace;
+}
+
+h1 {
+   font-size:2.2em;
+}
+
+h2 {
+   font-size:1.8em;
+}
+
+h3 {
+   font-size:1.4em;
+}
+
+h4 {
+   font-size:1.0em;
+}
+
+h5 {
+   font-size:0.9em;
+}
+
+h6 {
+   font-size:0.8em;
+}
+
+a:visited {
+   color: rgb(50%, 0%, 50%);
+}
+
+pre, img {
+  max-width: 100%;
+}
+
+pre code {
+   display: block; padding: 0.5em;
+}
+
+code {
+  font-size: 92%;
+  border: 1px solid #ccc;
+}
+
+code[class] {
+  background-color: #F8F8F8;
+}
+
+table, td, th {
+  border: none;
+}
+
+blockquote {
+   color:#666666;
+   margin:0;
+   padding-left: 1em;
+   border-left: 0.5em #EEE solid;
+}
+
+hr {
+   height: 0px;
+   border-bottom: none;
+   border-top-width: thin;
+   border-top-style: dotted;
+   border-top-color: #999999;
+}
+
+@media print {
+   * {
+      background: transparent !important;
+      color: black !important;
+      filter:none !important;
+      -ms-filter: none !important;
+   }
+
+   body {
+      font-size:12pt;
+      max-width:100%;
+   }
+
+   a, a:visited {
+      text-decoration: underline;
+   }
+
+   hr {
+      visibility: hidden;
+      page-break-before: always;
+   }
+
+   pre, blockquote {
+      padding-right: 1em;
+      page-break-inside: avoid;
+   }
+
+   tr, img {
+      page-break-inside: avoid;
+   }
+
+   img {
+      max-width: 100% !important;
+   }
+
+   @page :left {
+      margin: 15mm 20mm 15mm 10mm;
+   }
+
+   @page :right {
+      margin: 15mm 10mm 15mm 20mm;
+   }
+
+   p, h2, h3 {
+      orphans: 3; widows: 3;
+   }
+
+   h2, h3 {
+      page-break-after: avoid;
+   }
+}
+</style>
+
+
+
+</head>
+
+<body>
+<h2>Example Usage of networkplanner R library</h2>
+
+<p>Load networkplanner scenario from a directory and plot it.
+&quot;Fake&quot; nodes, which represent connections to an existing network are blue.</p>
+
+<pre><code class="r"># assumes networkplanner.R library is installed
+# and that you&#39;re working from the networkplanner.R src dir
+require(networkplanner)
+base_dir &lt;- &quot;inst/test_data/108&quot;
+np &lt;- read_networkplan(base_dir)
+</code></pre>
+
+<pre><code>## OGR data source with driver: ESRI Shapefile 
+## Source: &quot;/home/cjn/src/networkplanner.R/inst/test_data/108&quot;, layer: &quot;networks-proposed&quot;
+## with 115 features and 1 fields
+## Feature type: wkbLineString with 2 dimensions
+</code></pre>
+
+<pre><code class="r">V(np@network)[V(np@network)$Network..Is.fake]$color &lt;- &quot;blue&quot;
+plot(np@network, vertex.size=6, vertex.label=&quot;&quot;)
+</code></pre>
+
+<p><img src="figure/load.png" alt="plot of chunk load"> </p>
+
+<p>The above plot displays all nodes of the scenario, including those that are not
+connected to the network.  The following chunk finds the subgraph of vertices
+that are connected to the existing network.  </p>
+
+<pre><code class="r"># get the igraph from the NetworkPlan
+g &lt;- np@network
+
+# get the fake vertex ids and those reachable from the fake vertex ids
+fake_vids &lt;- as.numeric(V(g)[V(g)$Network..Is.fake])
+reachable &lt;- unlist(sapply(fake_vids, 
+  function(x) { 
+    subcomponent(g, x, mode=&quot;ALL&quot;) 
+  }))
+
+# get the subgraph consisting of the reachable vertices
+sg &lt;- induced.subgraph(g, reachable)
+
+V(sg)[V(sg)$Network..Is.fake]$color &lt;- &quot;blue&quot;
+plot(sg, vertex.size=6, vertex.label=&quot;&quot;)
+</code></pre>
+
+<p><img src="figure/subgraph.png" alt="plot of chunk subgraph"> </p>
+
+<p>Sequence the networkplan via the mv_v_dmd_sequence_model.
+This model orders the vertices and edges via a combination of &quot;network&quot; order
+and Downstream network length / Downstream demand (ascending, to connect
+communities with most demand at least cost first)</p>
+
+<pre><code class="r">library(ggplot2)
+np &lt;- sequence_plan_far(np, sequence_model=mv_v_dmd_sequence_model)
+
+settlements &lt;- get.data.frame(np@network, what=&quot;vertices&quot;)
+
+ggplot(settlements, aes(Sequence..Far.sighted.sequence, 
+  Sequence..Downstream.distance.sum.m.per.downstream.demand.sum.kwh)) +
+  geom_line() + 
+  ylim(0, 0.2)
+</code></pre>
+
+<pre><code>## Warning: Removed 101 rows containing missing values (geom_path).
+</code></pre>
+
+<p><img src="figure/sequence.png" alt="plot of chunk sequence"> </p>
+
+<p>Now let&#39;s plot the map via ggplot</p>
+
+<pre><code class="r">library(OpenStreetMap)
+
+# get the vertices and edges as spatial dataframes
+network_sdfs &lt;- as_spatial_dataframes(np) 
+v_spdf &lt;- network_sdfs$vertices
+e_sldf &lt;- network_sdfs$edges
+
+# get the bounds for base_map retrieval
+bounds &lt;- bbox(e_sldf)
+# make &#39;em a little bigger for context
+bounds[,1] &lt;- bounds[,1] - 0.1
+bounds[,2] &lt;- bounds[,2] + 0.1
+
+# get base_map via osm and plot
+lower_left &lt;- c(lat=bounds[2,2], lon=bounds[1,1])
+upper_right &lt;- c(lat=bounds[2,1],lon=bounds[1,2])
+osm_map &lt;- openmap(lower_left, upper_right, type=&quot;osm&quot;)
+
+# change projection, fortify and merge back dataframe to get sequence values
+proj &lt;- CRS(&quot;+proj=merc +a=6378137 +b=6378137 +lat_ts=0.0 +lon_0=0.0 +x_0=0.0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +no_defs&quot;)
+e_sldf_wgs84 &lt;- spTransform(e_sldf, proj)
+e_sldf_wgs84.f &lt;- fortify(e_sldf_wgs84, id=ID)
+e_sldf_wgs84.f &lt;- merge(e_sldf_wgs84.f, e_sldf_wgs84@data, by.x=&quot;id&quot;, by.y=&quot;ID&quot;)
+
+# assign phases with 5 equal-density intervals
+e_sldf_wgs84.f$phase &lt;- cut(e_sldf_wgs84.f$Sequence..Far.sighted.sequence, breaks=5, labels=FALSE)
+
+
+base_map &lt;- autoplot(osm_map)
+base_map + 
+  geom_path(data=e_sldf_wgs84.f, aes(x=long,y=lat,group=group,color=factor(phase))) + 
+  coord_equal() + 
+  scale_color_brewer(name=&quot;phase&quot;, palette=&quot;Reds&quot;)
+</code></pre>
+
+<p><img src="figure/sequence_map.png" alt="plot of chunk sequence_map"> </p>
+
+</body>
+
+</html>
