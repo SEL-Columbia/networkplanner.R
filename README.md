@@ -65,12 +65,14 @@ creation:
 
 - Vertex Attributes:   
   `Network..Is.fake`:  Whether this vertex is a "Fake" node  
-  `Network..Is.root`:  Whether this vertex is a "Sequence root" (only available if 'directed')
 
 - Edge Attributes:  
   `FID`:  The FID of the corresponding record in the original existing network 
 shapefile  
   `distance`:  The distance (in meters) between vertices that this edge spans  
+
+- Directed NetworkPlan Vertex Attributes:
+  `Network..Is.root`:  Whether this vertex is a "Sequence root" 
 
 - Sequenced NetworkPlan Vertex Attributes:  
   `Sequence..Far.sighted.sequence`:  The sequence associated with this vertex 
@@ -93,11 +95,17 @@ A NetworkPlan represents a graph-oriented view of the scenario output of
 Network Planner.  The edges of the graph are the segments connecting settlement
 nodes (the vertices).  
 
-
 The call `read_networkplan(base_dir)` returns a NetworkPlan object with
 an igraph object in the network slot (i.e. `np@network`).  The igraph returned
-is a forest of directed trees.  There are 2 possible roots for these directed
-trees:
+is an undirected graph with vertices representing settlements and edges 
+representing connections between.  
+
+In order to sequence this graph, it must be converted into a forest of
+directed trees.  You can do this explicitly via `directed_networkplan` or
+it will happen implicitly in the call to `sequence_plan_far`.  
+
+Once you have a directed NetworkPlan, there are 2 possible starting vertices 
+for each subcomponent of the graph:
 
 1.  "Fake" vertices:  
 
@@ -108,9 +116,9 @@ trees:
 
 2.  "Selected" vertices:  
 
-  For trees (subnetworks) that are not connected to an existing network 
+  For trees (subcomponents) that are not connected to an existing network 
   (i.e. have no "Fake" vertex), a root is selected which represents the
-  node with maximal demand (we may make this customizable going forward)
+  node with maximal demand (or some custom root selection function)
 
 "Network root" vertices can be found via `V(network)[V(network)$Network..Is.root]`
 These are not necessarily the same as the roots of a tree/subnetwork since 
