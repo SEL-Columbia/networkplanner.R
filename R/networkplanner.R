@@ -475,9 +475,10 @@ write.NetworkPlan <- function(np, directory_name,
     base_dir <- R.utils::getAbsolutePath(normalizePath(directory_name, winslash="/"))
     
     # subsetting node_df according to includeFake
-    node_df <- get.data.frame(np@network, what="vertices")
-    if (includeFake == FALSE){
-        output_df <- subset(node_df, !Network..Is.fake)
+    output_df <- get.data.frame(np@network, what="vertices")
+    if (includeFake == FALSE && 
+        ("Network..Is.fake" %in% list.vertex.attributes(np@network))) {
+        output_df <- subset(output_df, !Network..Is.fake)
     }
     
     # getting edge SPLDF from NP object
