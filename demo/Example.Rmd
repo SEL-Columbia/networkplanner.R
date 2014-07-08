@@ -8,7 +8,7 @@ Load networkplanner scenario from a directory and plot it.
 # assumes networkplanner.R library is installed
 # and that you're working from the networkplanner.R src dir
 require(networkplanner)
-base_dir <- "inst/test_data/108"
+base_dir <- "../inst/test_data/108"
 np <- read_networkplan(base_dir)
 
 V(np@network)[V(np@network)$Network..Is.fake]$color <- "blue"

@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+
+<title>Estimating the cost of an LV Network for a set of Households</title>
+
+
+
+
+
+<style type="text/css">
+body, td {
+   font-family: sans-serif;
+   background-color: white;
+   font-size: 13px;
+}
+
+body {
+  max-width: 800px;
+  margin: auto;
+  padding: 1em;
+  line-height: 20px;
+}
+
+tt, code, pre {
+   font-family: 'DejaVu Sans Mono', 'Droid Sans Mono', 'Lucida Console', Consolas, Monaco, monospace;
+}
+
+h1 {
+   font-size:2.2em;
+}
+
+h2 {
+   font-size:1.8em;
+}
+
+h3 {
+   font-size:1.4em;
+}
+
+h4 {
+   font-size:1.0em;
+}
+
+h5 {
+   font-size:0.9em;
+}
+
+h6 {
+   font-size:0.8em;
+}
+
+a:visited {
+   color: rgb(50%, 0%, 50%);
+}
+
+pre, img {
+  max-width: 100%;
+}
+
+pre code {
+   display: block; padding: 0.5em;
+}
+
+code {
+  font-size: 92%;
+  border: 1px solid #ccc;
+}
+
+code[class] {
+  background-color: #F8F8F8;
+}
+
+table, td, th {
+  border: none;
+}
+
+blockquote {
+   color:#666666;
+   margin:0;
+   padding-left: 1em;
+   border-left: 0.5em #EEE solid;
+}
+
+hr {
+   height: 0px;
+   border-bottom: none;
+   border-top-width: thin;
+   border-top-style: dotted;
+   border-top-color: #999999;
+}
+
+@media print {
+   * {
+      background: transparent !important;
+      color: black !important;
+      filter:none !important;
+      -ms-filter: none !important;
+   }
+
+   body {
+      font-size:12pt;
+      max-width:100%;
+   }
+
+   a, a:visited {
+      text-decoration: underline;
+   }
+
+   hr {
+      visibility: hidden;
+      page-break-before: always;
+   }
+
+   pre, blockquote {
+      padding-right: 1em;
+      page-break-inside: avoid;
+   }
+
+   tr, img {
+      page-break-inside: avoid;
+   }
+
+   img {
+      max-width: 100% !important;
+   }
+
+   @page :left {
+      margin: 15mm 20mm 15mm 10mm;
+   }
+
+   @page :right {
+      margin: 15mm 10mm 15mm 20mm;
+   }
+
+   p, h2, h3 {
+      orphans: 3; widows: 3;
+   }
+
+   h2, h3 {
+      page-break-after: avoid;
+   }
+}
+</style>
+
+
+
+</head>
+
+<body>
+<h1>Estimating the cost of an LV Network for a set of Households</h1>
+
+<p>This example is related to the networkplanner library and uses
+minor functions from it, but is more broad than the library as it
+demonstrates the utility of igraph and SP packages as well.  </p>
+
+<hr>
+
+<p>Load point dataset from csv and map it.
+These points represent households clustered in several villages.</p>
+
+<pre><code class="r">require(sp)
+require(methods)
+require(RColorBrewer)
+csv_file &lt;- &quot;../inst/test_data/mmr_hh_spatial.csv&quot;
+hh_df &lt;- read.csv(csv_file)
+
+mapping_from &lt;- c(&quot;household._gps_longitude&quot;, 
+                  &quot;household._gps_latitude&quot;, 
+                  &quot;Household_geocharacterization.hh_size&quot;, 
+                  &quot;Household_geocharacterization.hh_rooms&quot;)
+mapping_to &lt;- c(&quot;X&quot;, &quot;Y&quot;, &quot;hh_size&quot;, &quot;hh_rooms&quot;)
+hh_df[,mapping_to] &lt;- hh_df[,mapping_from]
+hh_df &lt;- hh_df[,mapping_to]
+
+# transform the points and hh_size from factors to numerics
+unfactor_hh_size &lt;- function(hh_size) {
+    hh_size_num &lt;- suppressWarnings(as.numeric(levels(hh_size)))
+    hh_size_num[hh_size]
+}
+
+hh_df &lt;- transform(hh_df, hh_size=unfactor_hh_size(hh_size), 
+                          X=as.numeric(levels(X))[X], 
+                          Y=as.numeric(levels(Y))[Y])
+hh_sp_df &lt;- hh_df
+coordinates(hh_sp_df) &lt;- ~X + Y
+
+# and set the projection
+proj &lt;- &quot;+proj=longlat +datum=WGS84 +ellps=WGS84&quot;
+hh_sp_df@proj4string &lt;- CRS(proj)
+
+# simple plot of points (colored by hh_size)
+hh_classes &lt;- with(hh_df, seq(min(hh_size, na.rm=T), max(hh_size, na.rm=T), len=5)) 
+color_indices &lt;- findInterval(hh_df$hh_size, hh_classes)
+colors &lt;- brewer.pal(5, &quot;BuGn&quot;)[color_indices]
+colors[is.na(colors)] &lt;- &quot;#FFFFFF&quot;
+
+plot(hh_sp_df, pch=21, col=&quot;#000000&quot;, bg=colors, lwd=0.2)
+</code></pre>
+
+<p><img src="figure/hh_point_map.png" alt="plot of chunk hh_point_map"> </p>
+
+<p>As a first pass at an LV network, calculate the MST connecting all 
+points via igraph and plot the graph.</p>
+
+<pre><code class="r">require(igraph)
+require(geosphere)
+
+# create the full graph
+edge_df &lt;- data.frame(t(combn(1:nrow(hh_sp_df), 2)))
+names(edge_df) &lt;- c(&quot;from&quot;, &quot;to&quot;)
+
+# assign distances and create graph
+edge_df$weight &lt;- distHaversine(hh_sp_df[edge_df$from,], hh_sp_df[edge_df$to,])
+g &lt;- graph.data.frame(edge_df, directed=F)
+
+# compute the MST
+mst_g &lt;- minimum.spanning.tree(g)
+plot(mst_g, vertex.size=4, vertex.label=&quot;&quot;)
+</code></pre>
+
+<p><img src="figure/create_mst.png" alt="plot of chunk create_mst"> </p>
+
+<p>Calculate mean edge length and costs associated with the MST based network</p>
+
+<pre><code class="r">network_span &lt;- sum(E(mst_g)$weight)
+
+# sum of distances between edges / num edges
+mean_edge_len &lt;- network_span/length(E(mst_g))
+
+# assign costs to grid components
+LV_POLE_DIST_M &lt;- 50
+LV_POLE_COST_D &lt;- 150
+LV_COST_PER_M_D &lt;- 15
+MV_TO_LV_XFRM_COST_D &lt;- 10000
+LV_SURVEY_COST_PER_M_D &lt;- 0.0025
+
+# edge cost function
+edge_cost &lt;- function(distance) {
+    pole_cost &lt;- (distance / LV_POLE_DIST_M) * LV_POLE_COST_D
+    lv_cost &lt;- distance * LV_COST_PER_M_D
+    survey_cost &lt;- distance * LV_SURVEY_COST_PER_M_D
+    pole_cost + lv_cost + survey_cost
+}
+
+# order edges in desc length order
+mst_edge_df &lt;- get.data.frame(mst_g, what=&quot;edges&quot;)
+mst_edge_df &lt;- mst_edge_df[order(-mst_edge_df$weight),]
+mst_edge_df &lt;- transform(mst_edge_df, lv_cost=edge_cost(weight))
+
+# assign costs to edges
+E(mst_g)$lv_cost &lt;- edge_cost(E(mst_g)$weight)
+
+num_transformers &lt;- 1
+mst_based_cost &lt;- sum(mst_edge_df$lv_cost) + (num_transformers * MV_TO_LV_XFRM_COST_D)
+
+# summarize
+cat(&quot;mean edge length (meters): &quot;, mean_edge_len, &quot;\n&quot;)
+</code></pre>
+
+<pre><code>## mean edge length (meters):  473.1
+</code></pre>
+
+<pre><code class="r">cat(&quot;mst based cost (dollars): &quot;, mst_based_cost, &quot;\n&quot;)
+</code></pre>
+
+<pre><code>## mst based cost (dollars):  2939840
+</code></pre>
+
+<p>Construct the NetworkPlan from the MST based graph and map it.
+The map looks simple at this zoom level, but the village subnets are quite detailed.</p>
+
+<pre><code class="r"># map points to vertices in graph
+require(networkplanner)
+np &lt;- create_networkplan_from_graph(mst_g, hh_df, proj)
+
+# get spatial dataframes to map
+sp_dfs &lt;- as_spatial_dataframes(np)
+edge_sp_df &lt;- sp_dfs$edges
+
+plot(edge_sp_df)
+</code></pre>
+
+<p><img src="figure/mst_networkplan_map.png" alt="plot of chunk mst_networkplan_map"> </p>
+
+<p>Reduce costs by substituting lower cost transformers for expensive edges.
+Mean edge length and cost of the network are reduced significantly.</p>
+
+<pre><code class="r"># find the &#39;expensive&#39; edges and remove &#39;em in favor of transformers
+expensive_edge_df &lt;- mst_edge_df[mst_edge_df$lv_cost &gt; MV_TO_LV_XFRM_COST_D,]
+reduced_mst_g &lt;- mst_g
+reduced_mst_g[from=expensive_edge_df$from, to=expensive_edge_df$to] &lt;- F
+num_transformers &lt;- num_transformers + nrow(expensive_edge_df)
+
+reduced_network_span &lt;- sum(E(reduced_mst_g)$weight)
+
+# sum of distances between edges / num edges
+reduced_mean_edge_len &lt;- reduced_network_span/length(E(reduced_mst_g))
+
+reduced_mst_based_cost &lt;- sum(E(reduced_mst_g)$lv_cost) + (num_transformers * MV_TO_LV_XFRM_COST_D)
+
+# summarize
+cat(&quot;reduced mean edge length (meters): &quot;, reduced_mean_edge_len, &quot;\n&quot;)
+</code></pre>
+
+<pre><code>## reduced mean edge length (meters):  22.97
+</code></pre>
+
+<pre><code class="r">cat(&quot;reduced mst based cost (dollars): &quot;, reduced_mst_based_cost, &quot;\n&quot;)
+</code></pre>
+
+<pre><code>## reduced mst based cost (dollars):  219386
+</code></pre>
+
+<p>Construct the Reduced NetworkPlan and map it on top of the MST based map.
+Note the reduced network in red.</p>
+
+<pre><code class="r"># map points to vertices in graph
+reduced_np &lt;- create_networkplan_from_graph(reduced_mst_g, hh_df, proj)
+
+# get spatial dataframes to map
+reduced_sp_dfs &lt;- as_spatial_dataframes(reduced_np)
+reduced_edge_sp_df &lt;- reduced_sp_dfs$edges
+
+plot(edge_sp_df)
+lines(reduced_edge_sp_df, col=&quot;red&quot;)
+</code></pre>
+
+<p><img src="figure/reduced_networkplan.png" alt="plot of chunk reduced_networkplan"> </p>
+
+<p>Decompose the reduced network into its connected components and map the largest component</p>
+
+<pre><code class="r">components &lt;- decompose.graph(reduced_mst_g)
+component_sizes &lt;- sapply(components, function(g) { length(E(g)) })
+
+largest_component &lt;- components[[which(component_sizes==max(component_sizes))]]
+# map points to vertices in graph
+np &lt;- create_networkplan_from_graph(largest_component, hh_df, proj)
+
+# get spatial dataframes to map
+sp_dfs &lt;- as_spatial_dataframes(np)
+edge_sp_df &lt;- sp_dfs$edges
+
+dist_classes &lt;- with(edge_sp_df@data, seq(min(lv_cost), max(lv_cost), len=5)) 
+color_indices &lt;- findInterval(edge_sp_df@data$lv_cost, dist_classes)
+colors &lt;- brewer.pal(5, &quot;BuGn&quot;)[color_indices]
+
+plot(edge_sp_df, col=colors)
+points(hh_sp_df)
+</code></pre>
+
+<p><img src="figure/decomposed_map.png" alt="plot of chunk decomposed_map"> </p>
+
+</body>
+
+</html>

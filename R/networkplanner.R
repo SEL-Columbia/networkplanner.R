@@ -166,6 +166,29 @@ create_networkplan <- function(metrics_df, proposed_network_df, proj4string) {
     new("NetworkPlan", network=network, proj=proj4string)
 }
 
+#' Make a NetworkPlan out of a graph and related vertex datafram
+#' @param g an igraph
+#' @param vertex_df a dataframe of vertices with indices corresponding to the
+#'        from/to attributes of the edges of the igraph
+#' @param proj the proj4 projection as a string
+#' @return A NetworkPlan
+#' @export
+create_networkplan_from_graph <- function(g, vertex_df, proj) {
+
+    join_vertex_df_igraph <- function(g, vertex_df) {
+
+        vertex_df$id <- 1:nrow(vertex_df)
+        col_names <- setdiff(names(vertex_df), "id")
+        col_names <- c("id", col_names)
+        vertex_df <- vertex_df[,col_names]
+        edge_df <- get.data.frame(g, what="edges")
+        graph.data.frame(edge_df, directed=F, vertices=vertex_df)
+    }     
+
+    network <- join_vertex_df_igraph(g, vertex_df)
+    np <- new("NetworkPlan", network=network, proj=proj)
+}
+
 #' Take an undirected NetworkPlan and return one that 
 #' guarantees that fake nodes belong to disjoint components
 #' and that no cycles exist
@@ -565,3 +588,4 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan"),
         np
     }
 )
+
