@@ -589,3 +589,33 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan"),
     }
 )
 
+#' Convert json of form { vertices: {...}, edges: {...} }
+#' to an igraph
+#' @param json_str json representation of graph as a string
+#' @return igraph 
+#' @export
+json_to_igraph <- function(json_str) {
+    js_list <- fromJSON(json_str)
+    vdf <- list_of_lists_to_df(js_list$vertices)
+    vdf$id <- 1:nrow(vdf)
+    col_names <- setdiff(names(vdf), "id")
+    col_names <- c("id", col_names)
+    vdf <- vdf[,col_names]
+    edf <- list_of_lists_to_df(js_list$edges)
+    graph.data.frame(edf, FALSE, vdf)
+} 
+       
+#' Convert an igraph to json of form { vertices: {...}, edges: {...} }
+#' @param ig igraph
+#' @return json representation of an igraph
+#' @export
+igraph_to_json <- function(ig) {
+    vdf <- get.data.frame(ig, what="vertices") 
+    edf <- get.data.frame(ig, what="edges") 
+    l <- list()
+    l$vertices <- df_to_list(vdf)   
+    l$edges <- df_to_list(edf)   
+
+    toJSON(l)
+}
+

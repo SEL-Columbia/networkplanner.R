@@ -536,6 +536,31 @@ min_span_components <- function(network, proj4string="+proj=longlat +datum=WGS84
     min.network <- graph.disjoint.union(min.components)
 } 
         
+# Convert a dataframe to a list
+df_to_list <- function(df) { 
+    l <- list()
+    for(rname in row.names(df)) {
+        l[[rname]] <- list()
+        for(name in names(df)) {
+            l[[rname]][[name]] <- df[rname, name]
+        }
+    }
+    l
+}
+
+# Convert a list of lists to a dataframe
+list_of_lists_to_df <- function(l_o_l) { 
+    col_attrs <- t(sapply(l_o_l, names))
+    col_names <- Reduce(union, col_attrs)
+    stopifnot(ncol(col_attrs)==length(col_names)) 
+    res_df <- as.data.frame(sapply(col_names, 
+                function(nm) { Reduce(c, 
+                    sapply(l_o_l, function(l) { 
+                        ifelse(is.null(l[nm][[1]]), NA, l[nm]) }))
+                }))
+    names(res_df) <- col_names
+    res_df
+}  
 
 # Sample benchmarking code
 # bench_mark <- microbenchmark(adj1 = get_adjacency_matrix2(network_shp),
