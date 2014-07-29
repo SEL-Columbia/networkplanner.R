@@ -608,6 +608,7 @@ json_to_igraph <- function(json_str) {
 #' Convert an igraph to json of form { vertices: {...}, edges: {...} }
 #' @param ig igraph
 #' @return json representation of an igraph
+#' @export
 igraph_to_json <- function(ig) {
     vdf <- get.data.frame(ig, what="vertices") 
     edf <- get.data.frame(ig, what="edges") 
