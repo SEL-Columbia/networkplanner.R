@@ -583,8 +583,15 @@ setMethod("sequence_plan_far", signature(np="NetworkPlan"),
         np <- sequence_plan(np, selector=selector)
         
         # now add sequence number to edges
+        # sequence number of "to" node should be associated
+        # with the edge (i.e. edge gets sequence of downstream node)
         real_nodes <- which(degree(np@network, mode="in")!=0)
-        E(np@network)[ to(real_nodes) ]$Sequence..Far.sighted.sequence <- V(np@network)[real_nodes]$Sequence..Far.sighted.sequence
+        edge_df <- get.data.frame(np@network, what="edges")
+        # make sure all edges have a to reference to a "real" node
+        stopifnot(nrow(edge_df)==nrow(edge_df[edge_df$to %in% real_nodes,]))
+        np@network[from=edge_df$from, to=edge_df$to, 
+                   attr="Sequence..Far.sighted.sequence"] <- 
+        V(np@network)[edge_df$to]$Sequence..Far.sighted.sequence
         np
     }
 )
