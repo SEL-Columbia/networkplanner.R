@@ -7,6 +7,17 @@ The core data structure is an [igraph](http://igraph.org)
 
 Installation
 ---
+
+NOTE:  This library is no longer compatible with the latest version of igraph.  
+The last version of igraph that IS compatible is 0.7.1.
+
+You can install igraph v0.7.1 via the following:
+```
+install.packages("http://igraph.org/nightly/get/r/igraph_0.7.1.tar.gz", repos=NULL, type="source")
+```
+
+Now you can install the rest:
+
 ```
 install.packages('devtools')
 library(devtools)
